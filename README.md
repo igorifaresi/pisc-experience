@@ -25,9 +25,9 @@ ceq r r/i
 cgt r r/i
 clt r r/i
 
-jmp  r/i
-jt   r/i
-jf   r/i
+jmp  label
+jt   label
+jf   label
 
 pokev r
 peekv r
