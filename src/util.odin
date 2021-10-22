@@ -1,5 +1,5 @@
 // NOTE(samuel): This file is the place for randon but usefull functions
-package eter
+package pisc
 
 import "core:math"
 import "core:mem"

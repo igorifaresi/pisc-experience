@@ -1,4 +1,4 @@
-package main
+package pisc
 
 import "core:fmt"
 import ray "vendor:raylib"
