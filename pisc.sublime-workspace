@@ -1,0 +1,427 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"colli",
+				"collided_id"
+			],
+			[
+				"weapon",
+				"weapon_1"
+			],
+			[
+				"debug_push",
+				"debug_push_line"
+			],
+			[
+				"debug_pus",
+				"debug_push_line"
+			],
+			[
+				"debu",
+				"debug_has_been_init"
+			],
+			[
+				"Sha",
+				"Shape_Type"
+			],
+			[
+				"foo",
+				"foo_2"
+			],
+			[
+				"Enti",
+				"Entity_Id"
+			],
+			[
+				"in",
+				"input_vec"
+			],
+			[
+				"draw_te",
+				"draw_textured_rect"
+			],
+			[
+				"sprite_",
+				"sprite_table_load_textures"
+			],
+			[
+				"spr",
+				"sprite_table"
+			],
+			[
+				"ro",
+				"row_count"
+			]
+		]
+	},
+	"buffers":
+	[
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"intall",
+				"Package Control: Install Package"
+			],
+			[
+				"colors",
+				"UI: Select Color Scheme"
+			],
+			[
+				":install",
+				"Colorsublime: Install Theme"
+			],
+			[
+				"color ins",
+				"Colorsublime: Install Theme"
+			],
+			[
+				"instal",
+				"Package Control: Install Package"
+			],
+			[
+				":theme",
+				"UI: Select Theme"
+			],
+			[
+				":color",
+				"UI: Select Color Scheme"
+			],
+			[
+				"color",
+				"UI: Select Color Scheme"
+			],
+			[
+				"theme",
+				"UI: Select Theme"
+			],
+			[
+				"open",
+				"View: Toggle Open Files in Side Bar"
+			],
+			[
+				"install pa",
+				"Package Control: Install Package"
+			],
+			[
+				"packa",
+				"Install Package Control"
+			]
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 154.0,
+		"history":
+		[
+			"2 + 3",
+			"dir",
+			"ls"
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/home/samuel/dox/projects/pisc-experience"
+	],
+	"file_history":
+	[
+		"/home/samuel/dox/projects/eternosphere/src/glfw_plt/glfw_plt.odin",
+		"/home/samuel/dox/projects/eternosphere/src/render/shaders/text_shader.frag",
+		"/home/samuel/dox/projects/eternosphere/src/render/shaders/debug_shader.frag",
+		"/Z/Work/eternosphere/zig_engine/src/entity.zig",
+		"/Z/Work/eternosphere/zig_engine/src/main.zig",
+		"/Z/Work/eternosphere/zig_engine/src/common/glfw_plataform.zig",
+		"/Z/Work/eternosphere/src/main.odin",
+		"/C/Users/samuel/AppData/Roaming/Sublime Text/Packages/User/untitled.sublime-build",
+		"/Z/Work/eternosphere/src/entity.odin",
+		"/Z/Braid/slot_0.braid_campaign"
+	],
+	"find":
+	{
+		"height": 33.0
+	},
+	"find_in_files":
+	{
+		"height": 113.0,
+		"where_history":
+		[
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"scrollbar_highlights": true,
+		"show_context": true,
+		"use_buffer2": true,
+		"use_gitignore": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"sheets":
+			[
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 33.0
+	},
+	"input":
+	{
+		"height": 42.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.exec":
+	{
+		"height": 35.0
+	},
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "",
+	"project": "pisc.sublime-project",
+	"replace":
+	{
+		"height": 62.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"bui",
+				"build.sh"
+			],
+			[
+				"en",
+				"src/entity.odin"
+			],
+			[
+				"deu",
+				"src/render/debug_render.odin"
+			],
+			[
+				"we",
+				"src/weapons.odin"
+			],
+			[
+				"mai",
+				"src/main.odin"
+			],
+			[
+				"enti",
+				"src/entity.odin"
+			],
+			[
+				"main",
+				"src/main.odin"
+			],
+			[
+				"co",
+				"src/collision.odin"
+			],
+			[
+				"uti",
+				"src/util.odin"
+			],
+			[
+				"todo",
+				"Samuel_TODO.md"
+			],
+			[
+				"wea",
+				"src/weapons.odin"
+			],
+			[
+				"pre",
+				"src/entity_prefabs.odin"
+			],
+			[
+				"tod",
+				"Samuel_TODO.md"
+			],
+			[
+				"mat",
+				"src/math.odin"
+			],
+			[
+				"glo",
+				"src/globals.odin"
+			],
+			[
+				"to",
+				"Samuel_TODO.md"
+			],
+			[
+				"math",
+				"src/math.odin"
+			],
+			[
+				"prefa",
+				"src/entity_prefabs.odin"
+			],
+			[
+				"ent",
+				"src/entity.odin"
+			],
+			[
+				"inpu",
+				"src/input.odin"
+			],
+			[
+				"ass",
+				"src/asset_table.odin"
+			],
+			[
+				"assets",
+				"src/assets.odin"
+			],
+			[
+				"asst",
+				"src/asset_table.odin"
+			],
+			[
+				"ren",
+				"src/render/render.odin"
+			],
+			[
+				"plt",
+				"src/glfw_plt/glfw_plt.odin"
+			],
+			[
+				"debu",
+				"src/render/debug_render.odin"
+			],
+			[
+				"util",
+				"src\\util.odin"
+			],
+			[
+				"col",
+				"src\\collision.odin"
+			],
+			[
+				"rend",
+				"src\\render\\render.odin"
+			],
+			[
+				"glfw",
+				"src\\glfw_plt\\glfw_plt.odin"
+			],
+			[
+				"plata",
+				"zig_engine\\src\\common\\glfw_plataform.zig"
+			],
+			[
+				"assets.od",
+				"src\\assets.odin"
+			],
+			[
+				"pack",
+				"src\\packer.odin"
+			],
+			[
+				"dui",
+				"src\\dui\\dui.odin"
+			],
+			[
+				"render",
+				"src\\render\\render.odin"
+			]
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 323.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 592.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": false,
+	"show_open_files": true,
+	"show_tabs": true,
+	"side_bar_visible": false,
+	"side_bar_width": 234.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}
