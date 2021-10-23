@@ -11,6 +11,43 @@ Instruction_Type :: enum u8 {
 	Call,  Ret,
 }
 
+mnemonics_table := map[string]Instruction_Type {
+	"add"   = .Add  , "sub"   = .Sub  , "mul"  = .Mul , "div" = .Div,
+	"or"    = .Or   , "and"   = .And  , "not"  = .Not , "xor" = .Xor,
+	"load"  = .Load , "store" = .Store, "move" = .Move,
+	"sl"    = .Sl   , "sr"    = .Sr   ,
+	"ceq"   = .Ceq  , "cgt"   = .Cgt  , "clt"  = .Clt ,
+	"jmp"   = .Jmp  , "jt"    = .Jt   , "jf"   = .Jf  ,
+	"pokev" = .Pokev, "peekv" = .Peekv, "swap" = .Swap,
+	"call"  = .Call , "ret"   = .Ret  ,  
+}
+
+Register_Type :: enum u8 {
+	r0 , r1 , r2 , r3 , r4 , r5 , r6 , r7, // general use
+	r8 , r9 , ra , rb , rc , rd , re , rf,
+	
+	ri0, ri1, ri2, ri3, ri4, ri5, ri6, ri7, // function input
+	
+	ro0, ro1, // function output
+	
+	sp , pc, // special
+	
+	x  , y, // coordinates
+}
+
+registers_table := map[string]Register_Type {
+	"r0" = .r0, "r1" = .r1, "r2" = .r2, "r3" = .r3, "r4" = .r4, "r5" = .r5, "r6" = .r6, "r7" = .r7,
+	"r8" = .r8, "r9" = .r9, "ra" = .ra, "rb" = .rb, "rc" = .rc, "rd" = .rd, "re" = .re, "rf" = .rf,
+
+	"ri0" = .ri0, "ri1" = .ri1, "ri2" = .ri2, "ri3" = .ri3, "ri4" = .ri4, "ri5" = .ri5, "ri6" = .ri6, "ri7" = .ri7,
+
+	"ro0" = .ro0, "ro1" = .ro1,
+
+	"sp" = .sp, "pc" = .pc,
+
+	"x" = .x, "y" = .y,
+}
+
 Instruction :: struct {
 	type: Instruction_Type,
 	imediate: bool, // if uses a imediate as paremeter
