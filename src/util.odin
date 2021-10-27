@@ -64,6 +64,8 @@ sl_remove :: proc(list: ^Static_List($T, $S), pos: u32) -> (value: T) {
 
     list.len -= 1
     for i := pos; i < list.len; i += 1 do list.data[i] = list.data[i + 1]
+
+    return
 }
 
 sl_push :: proc(list: ^Static_List($T, $S), val: T) -> (error: bool) {

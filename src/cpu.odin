@@ -7,19 +7,67 @@ Instruction_Type :: enum u8 {
 	Sl,    Sr,
 	Ceq,   Cgt,   Clt,
 	Jmp,   Jt,    Jf,
-	Pokev, Peekv, Swap,
-	Call,  Ret,
+	Vpoke, Vpeek, Vswap,
+	Call,  Ret,   Nop,
 }
 
-mnemonics_table := map[string]Instruction_Type {
-	"add"   = .Add  , "sub"   = .Sub  , "mul"  = .Mul , "div" = .Div,
-	"or"    = .Or   , "and"   = .And  , "not"  = .Not , "xor" = .Xor,
-	"load"  = .Load , "store" = .Store, "move" = .Move,
+Instruction_Param_Type :: enum u8 {
+	Reg_And_Reg_And_Offset,
+	Reg_And_Reg_Or_Imediate,
+	Reg,
+	Reg_Or_Imediate,
+	Nothing,
+}
+
+instruction_param_type_table := map[Instruction_Type]Instruction_Param_Type {
+	.Add   = .Reg_And_Reg_Or_Imediate, .Sub = .Reg_And_Reg_Or_Imediate,
+	.Mul = .Reg_And_Reg_Or_Imediate, .Div = .Reg_And_Reg_Or_Imediate,
+
+	.Or = .Reg_And_Reg_Or_Imediate, .And = .Reg_And_Reg_Or_Imediate, .Not = .Reg, .Xor = .Reg_And_Reg_Or_Imediate,
+	.Load  = .Reg_And_Reg_And_Offset, .Store = .Reg_And_Reg_And_Offset, .Move = .Reg_And_Reg_Or_Imediate,
+	
+	.Sl = .Reg_And_Reg_Or_Imediate, .Sr = .Reg_And_Reg_Or_Imediate,
+	
+	.Ceq = .Reg_And_Reg_Or_Imediate, .Cgt = .Reg_And_Reg_Or_Imediate, .Clt = .Reg_And_Reg_Or_Imediate,
+	
+	.Jmp = .Reg_Or_Imediate, .Jt = .Reg_Or_Imediate, .Jf = .Reg_Or_Imediate,
+	
+	.Vpoke = .Reg, .Vpeek = .Reg, .Vswap = .Nothing,
+	
+	.Call = .Reg_Or_Imediate, .Ret = .Nothing, .Nop = .Nothing,
+}
+
+get_instruction_param_qnt :: proc(ins: Instruction_Type) -> int {
+	switch instruction_param_type_table[ins] {
+	case .Reg_And_Reg_And_Offset:  return 3
+	case .Reg_And_Reg_Or_Imediate: return 2
+	case .Reg:                     return 1
+	case .Reg_Or_Imediate:         return 1
+	case .Nothing:
+	}
+
+	return 0
+}
+
+mnemonics_table := map[cstring]Instruction_Type {
+	"add"   = .Add  , "sub"   = .Sub  , "mul"   = .Mul , "div" = .Div,
+	"or"    = .Or   , "and"   = .And  , "not"   = .Not , "xor" = .Xor,
+	"load"  = .Load , "store" = .Store, "move"  = .Move,
 	"sl"    = .Sl   , "sr"    = .Sr   ,
-	"ceq"   = .Ceq  , "cgt"   = .Cgt  , "clt"  = .Clt ,
-	"jmp"   = .Jmp  , "jt"    = .Jt   , "jf"   = .Jf  ,
-	"pokev" = .Pokev, "peekv" = .Peekv, "swap" = .Swap,
-	"call"  = .Call , "ret"   = .Ret  ,  
+	"ceq"   = .Ceq  , "cgt"   = .Cgt  , "clt"   = .Clt ,
+	"jmp"   = .Jmp  , "jt"    = .Jt   , "jf"    = .Jf  ,
+	"vpoke" = .Vpoke, "vpeek" = .Vpeek, "vswap" = .Vswap,
+	"call"  = .Call , "ret"   = .Ret  , "nop"   = .Nop,
+}
+
+instruction_type_to_str :: proc(t: Instruction_Type) -> cstring {
+	s: cstring
+	for key, v in mnemonics_table {
+		if t == v {
+			s = key
+		}
+	}
+	return s
 }
 
 Register_Type :: enum u8 {
@@ -35,7 +83,7 @@ Register_Type :: enum u8 {
 	x  , y, // coordinates
 }
 
-registers_table := map[string]Register_Type {
+registers_table := map[cstring]Register_Type {
 	"r0" = .r0, "r1" = .r1, "r2" = .r2, "r3" = .r3, "r4" = .r4, "r5" = .r5, "r6" = .r6, "r7" = .r7,
 	"r8" = .r8, "r9" = .r9, "ra" = .ra, "rb" = .rb, "rc" = .rc, "rd" = .rd, "re" = .re, "rf" = .rf,
 
@@ -48,9 +96,20 @@ registers_table := map[string]Register_Type {
 	"x" = .x, "y" = .y,
 }
 
+register_type_to_str :: proc(t: Register_Type) -> cstring {
+	s: cstring
+	for key, v in registers_table {
+		if t == v {
+			s = key
+		}
+	}
+	return s
+}
+
 Instruction :: struct {
 	type: Instruction_Type,
 	imediate: bool, // if uses a imediate as paremeter
+	imediate_as_label: bool,
 	p0, p1: u8,
 	p2: i16,
 }
@@ -125,12 +184,12 @@ cpu_clock :: proc(using cpu: ^CPU) {
 				pc = labels.data[inst.p2].value
 			}
 
-		case .Pokev:
+		case .Vpoke:
 			addr  := reg_table[inst.p1] + inst.p2
 			value := transmute(u16)(reg_table[inst.p0])
 			gpu.buffer[addr] = value
 
-		case .Peekv:
+		case .Vpeek:
 			addr := reg_table[inst.p1] + inst.p2
 			reg_table[inst.p0] = transmute(i16)(gpu.buffer[addr])
 
@@ -141,7 +200,9 @@ cpu_clock :: proc(using cpu: ^CPU) {
 		case .Ret:
 			pc = sl_pop(&call_stack)
 
-		case .Swap:
+		case .Vswap:
+
+		case .Nop:
 		} // end switch
 	}
 }
