@@ -130,6 +130,7 @@ CPU :: struct {
 	call_stack: Static_List(u16, 256),
 
 	instructions: Static_List(Instruction, MAX_INSTRUCTIONS),
+	editing_buffers: Static_List(Static_List(byte, 16), MAX_INSTRUCTIONS * 4),
 	labels: Static_List(Label, 4096),
 	mem: [1024 * 64]byte,
 
