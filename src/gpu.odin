@@ -1,13 +1,8 @@
 package pisc
 
-BUFFER_W :: 480
-BUFFER_H :: 270
+GPU_BUFFER_W :: 480
+GPU_BUFFER_H :: 270
 
 GPU :: struct {
-	buffer: [BUFFER_W * BUFFER_H]u16,
-}
-
-
-show_buffer :: proc(gpu: ^GPU) {
-	
+	buffer: [GPU_BUFFER_W * GPU_BUFFER_H]u16,
 }

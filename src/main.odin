@@ -25,7 +25,7 @@ Cursor :: struct {
 
 main_cpu: CPU
 config := Config{
-	window_width=1000,
+	window_width=1200,
 	window_height=600,
 	editor_font_size=20,
 	editor_line_height=20,
@@ -154,10 +154,29 @@ set_buffer :: proc(i_ins: u32, i_param: u32, str: string) {
 	}
 }
 
+draw_video_buffer :: proc() {
+	using config
+
+	pisc_color_to_rbg :: proc(pisc_color: u16) -> (rgb: ray.Color) {
+		rgb.r = u8(((pisc_color       & 0b00000000_00011111) * 255) / 31)
+		rgb.g = u8(((pisc_color >> 5  & 0b00000000_00011111) * 255) / 31)
+		rgb.b = u8(((pisc_color >> 10 & 0b00000000_00011111) * 255) / 31) 
+		rgb.a = 255
+		return
+	}
+
+	for y : i32 = 0; y < GPU_BUFFER_H; y += 1 {
+		for x : i32 = 0; x < GPU_BUFFER_W; x += 1 {
+			pisc_color := main_cpu.gpu.buffer[y*GPU_BUFFER_W + x]
+			ray.DrawPixel(window_width  - 730 + x, y + 32, pisc_color_to_rbg(pisc_color));
+		}
+	}
+}
+
 draw_status :: proc() {
 	using config
 
-	x : i32 = window_width  - 80*8
+	x : i32 = window_width  - 730
 	y : i32 = 0
 	i : i32 = 0
 	ray.DrawText(ray.TextFormat("STATUS: %s", "RUNNING"), x, y + 8, memory_font_size, ray.LIGHTGRAY)
@@ -166,14 +185,14 @@ draw_status :: proc() {
 draw_memory :: proc() {
 	using config
 
-	x : i32 =  window_width  - 80*8
+	x : i32 =  window_width  - 730
 	y : i32 = (window_height - 28*4) - 28
 	i : i32
 	ray.DrawText("REGISTERS", x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	for name, reg in registers_table {
 		if i%8 == 0 { 
 			y += 28
-			x = window_width - 80*9
+			x = window_width - 730 - 80
 		}
 
 		x += 80
@@ -204,8 +223,8 @@ draw_memory :: proc() {
 		i += 1
 	}
 
-	x =  window_width  - 80*8
-	y = BUFFER_H - 28 + 32
+	x =  window_width  - 730
+	y = GPU_BUFFER_H + 32
 	i = 0
 	ray.DrawText("CALL STACK", x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	call_stack := sl_slice(&main_cpu.call_stack)
@@ -453,6 +472,10 @@ main :: proc() {
 	sl_push(&main_cpu.instructions, Instruction{ type=.Jmp, imediate=false, p0=u8(Register_Type.r0) })
 	sl_push(&main_cpu.instructions, Instruction{ type=.Load })
 
+	for i := 0; i < GPU_BUFFER_H * GPU_BUFFER_W; i += 1 {
+		main_cpu.gpu.buffer[i] = u16(i)
+	}
+
 	set_buffer(0, 0, "nopis")
 	set_buffer(1, 0, "adding")
 
@@ -475,6 +498,8 @@ main :: proc() {
         draw_memory()
 
         draw_status()
+
+        draw_video_buffer()
 
         ray.EndDrawing()
     }
