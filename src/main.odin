@@ -154,6 +154,17 @@ set_buffer :: proc(i_ins: u32, i_param: u32, str: string) {
 	}
 }
 
+push_label :: proc(str: string, line: u16) {
+	label: Label
+	
+	for i := 0; i < len(str); i += 1 {
+		sl_push(&label.name, str[i])
+	}
+	label.line = line
+
+	sl_push(&main_cpu.labels, label)
+}
+
 draw_video_buffer :: proc() {
 	using config
 
@@ -192,10 +203,10 @@ draw_memory :: proc() {
 	for name, reg in registers_table {
 		if i%8 == 0 { 
 			y += 28
-			x = window_width - 730 - 80
+			x = window_width - 730 - 90
 		}
 
-		x += 80
+		x += 90
 		ray.DrawText(ray.TextFormat("%s:", name), x, y, memory_font_size, ray.GRAY)
 
 		value := main_cpu.reg_table[int(reg)]
@@ -287,8 +298,23 @@ draw_editor :: proc() {
 	i_ins: u32 = 0
 	x: i32 = editor_left_padding
 	y: i32 = 0
-	line_number_x : i32 = editor_left_padding / 2 //TODO: gambiarra
+	line_number_x: i32 = editor_left_padding / 2 //TODO: gambiarra
 	for ins in sl_slice(&main_cpu.instructions) {
+		
+		labels := sl_slice(&main_cpu.labels)
+		for i := 0; i < len(labels); i += 1 {
+			label := &labels[i]
+
+			if label.line == u16(i_ins) {
+				tmp  := sl_slice(&label.name)
+				cstr := strings.clone_to_cstring(string(tmp))
+
+				y += 12
+				ray.DrawText(ray.TextFormat("%s:", cstr), 8, y, editor_font_size, ray.LIGHTGRAY)
+				y += editor_line_height
+			}
+		}
+
 		ray.DrawText(ray.TextFormat("%d", i_ins), line_number_x, y, editor_font_size, ray.GRAY)
 
 		draw_text(instruction_type_to_str(ins.type), x, y, i_ins, 0)
@@ -478,6 +504,8 @@ main :: proc() {
 
 	set_buffer(0, 0, "nopis")
 	set_buffer(1, 0, "adding")
+
+	push_label("LOOP", 3)
 
 	config.editor_font = ray.GetFontDefault()
     ray.InitWindow(config.window_width, config.window_height, "PISC Experience");

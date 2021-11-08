@@ -107,16 +107,17 @@ register_type_to_str :: proc(t: Register_Type) -> cstring {
 }
 
 Instruction :: struct {
-	type: Instruction_Type,
-	imediate: bool, // if uses a imediate as paremeter
+	type:              Instruction_Type,
+	imediate:          bool,
 	imediate_as_label: bool,
-	p0, p1: u8,
-	p2: i16,
+	p0, p1:            u8,
+	p2:                i16,
+	not_editing:       bool,
 }
 
 Label :: struct {
-	name:  string,
-	value: u16,
+	name: Static_List(byte, 16),
+	line: u16,
 }
 
 MAX_INSTRUCTIONS :: 1024 * 16
@@ -173,16 +174,16 @@ cpu_clock :: proc(using cpu: ^CPU) {
 		case .Ceq:  cmp_flag = reg_table[inst.p0] == b
 		case .Cgt:  cmp_flag = reg_table[inst.p0] > b
 		case .Clt:  cmp_flag = reg_table[inst.p0] < b
-		case .Jmp:  pc = labels.data[inst.p2].value
+		case .Jmp:  pc = labels.data[inst.p2].line
 
 		case .Jt:
 			if cmp_flag {
-				pc = labels.data[inst.p2].value
+				pc = labels.data[inst.p2].line
 			}
 
 		case .Jf:
 			if !cmp_flag {
-				pc = labels.data[inst.p2].value
+				pc = labels.data[inst.p2].line
 			}
 
 		case .Vpoke:
@@ -196,7 +197,7 @@ cpu_clock :: proc(using cpu: ^CPU) {
 
 		case .Call:
 			sl_push(&call_stack, pc)
-			pc = labels.data[inst.p2].value
+			pc = labels.data[inst.p2].line
 
 		case .Ret:
 			pc = sl_pop(&call_stack)
