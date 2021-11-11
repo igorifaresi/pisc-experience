@@ -21,9 +21,11 @@ Config :: struct {
 }
 
 Cursor :: struct {
-	ins:   u32,
-	param: u32,
-	char:  u32,
+	ins:      u32,
+	param:    u32,
+	char:     u32,
+	label:    u32,
+	in_label: bool,
 }
 
 main_cpu: CPU
@@ -438,13 +440,13 @@ draw_editor :: proc() {
 		tmp_x := x
 
 		ray.DrawText(get_buffer_cstr(line), tmp_x, y, editor_font_size, get_color(i_ins, 0))
-		if cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
+		if !cursor.in_label && cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
 
 		tmp_x += editor_mnemonic_left_margin
 
 		for i: u32 = 1; i < 4; i += 1 {
 			ray.DrawText(get_buffer_cstr(line + int(i)), tmp_x, y, editor_font_size, get_color(i_ins, i))
-			if cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
+			if !cursor.in_label && cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
 
 			tmp_x += editor_param_left_margin
 		}
@@ -461,20 +463,13 @@ process_input :: proc() {
 		if cursor.char >= length do cursor.char = length
 	}
 
-	update_param_cursor :: proc() {
-		param_qnt := get_instruction_param_qnt(main_cpu.instructions.data[cursor.ins].type)
-		if cursor.param >= u32(param_qnt) do cursor.param = u32(param_qnt)
-	}
-
 	if ray.IsKeyPressed(.UP) && cursor.ins > 0 {
 		cursor.ins -= 1
-		update_param_cursor()
 		update_char_cursor()
 	}
 		
-	if ray.IsKeyPressed(.DOWN) && cursor.ins < (main_cpu.instructions.len - 1) {
+	if ray.IsKeyPressed(.DOWN) && cursor.ins < (main_cpu.editing_buffers.len/4 - 1) {
 		cursor.ins += 1
-		update_param_cursor()
 		update_char_cursor()
 	}
 
@@ -487,8 +482,7 @@ process_input :: proc() {
 			update_char_cursor()
 		}
 
-		fmt.println(cursor)
-		if right && cursor.param < 4 {
+		if right && cursor.param < 3 {
 			cursor.param += 1
 			update_char_cursor()
 		}
@@ -518,7 +512,7 @@ process_input :: proc() {
 			length    := u32(len(cstr))
 			fmt.println(length)
 			if cursor.char > length {
-				if cursor.param < 4 {
+				if cursor.param < 3 {
 					cursor.param += 1
 					cursor.char = 0
 				} else {
@@ -530,13 +524,27 @@ process_input :: proc() {
 
 	if ray.IsKeyPressed(.ENTER) {
 		cursor.ins += 1
-		sl_insert(&main_cpu.instructions, Instruction{ type=.Nop }, u32(cursor.ins))
-		update_param_cursor()
-		update_char_cursor()
+
+		clean_buffer: Static_List(byte, 16)
+
+		idx := u32(cursor.ins)*4	
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+		
+		cursor.param = 0
+		cursor.char  = 0
 	}
 		
 	if ray.IsKeyPressed(.DELETE) {
-		sl_remove(&main_cpu.editing_buffers, u32(cursor.ins))
+		idx := u32(cursor.ins)*4
+		sl_remove(&main_cpu.editing_buffers, idx)
+		sl_remove(&main_cpu.editing_buffers, idx)
+		sl_remove(&main_cpu.editing_buffers, idx)
+		sl_remove(&main_cpu.editing_buffers, idx)
+
+		if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
 	}
 
 	char_buffer := &main_cpu.editing_buffers.data[cursor.ins * 4 + cursor.param]
