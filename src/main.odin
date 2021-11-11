@@ -6,15 +6,18 @@ import "core:strings"
 import ray "vendor:raylib"
 
 Config :: struct {
-	window_width:        i32,
-	window_height:       i32,
-	editor_font_size:    i32,
-	editor_line_height:  i32,
-	editor_top_padding:  i32,
-	editor_left_padding: i32,
-	editor_param_margin: i32,
-	editor_font:    ray.Font,
-	memory_font_size:    i32, 
+	window_width:                i32,
+	window_height:               i32,
+	editor_font_size:            i32,
+	editor_line_height:          i32,
+	editor_top_padding:          i32,
+	editor_left_padding:         i32,
+	editor_mnemonic_left_margin: i32,
+	editor_param_left_margin:    i32,
+	editor_font:            ray.Font,
+	editor_label_y_offset:       i32,
+	editor_label_x_offset:       i32,
+	memory_font_size:            i32, 
 }
 
 Cursor :: struct {
@@ -31,7 +34,10 @@ config := Config{
 	editor_line_height=20,
 	editor_top_padding=64,
 	editor_left_padding=64,
-	editor_param_margin=80,
+	editor_mnemonic_left_margin=120,
+	editor_param_left_margin=60,
+	editor_label_y_offset=12,
+	editor_label_x_offset=8,
 	memory_font_size=16,
 }
 cursor: Cursor
@@ -147,10 +153,15 @@ lookup_buffer :: proc(i_ins: u32, i_param: u32) -> cstring {
 }
 
 set_buffer :: proc(i_ins: u32, i_param: u32, str: string) {
-	char_buffer := &main_cpu.editing_buffers.data[i_ins * 4 + i_param]
+	idx := i_ins * 4 + i_param
+	char_buffer := &main_cpu.editing_buffers.data[idx]
 	sl_clear(char_buffer)
 	for i := 0; i < len(str); i += 1 {
 		sl_push(char_buffer, str[i])
+	}
+	if main_cpu.editing_buffers.len <= idx {
+		new_len := idx + 1
+		main_cpu.editing_buffers.len = new_len + (4 - new_len%4) 
 	}
 }
 
@@ -248,7 +259,7 @@ draw_memory :: proc() {
 	}
 }
 
-draw_editor :: proc() {
+/*draw_editor :: proc() {
 	using config
 
 	get_color :: proc(i_ins: u32, i_param: u32) -> ray.Color {
@@ -373,6 +384,74 @@ draw_editor :: proc() {
 		y += editor_line_height
 		i_ins += 1
 	}
+}*/
+
+draw_editor :: proc() {
+	using config
+
+	get_color :: proc(i_ins: u32, i_param: u32) -> ray.Color {		
+		if cursor.ins == i_ins && cursor.param == i_param {
+			return ray.YELLOW
+		}
+
+		return ray.LIGHTGRAY
+	}
+
+	get_buffer_cstr :: proc(i: int) -> cstring {
+		char_buffer := &main_cpu.editing_buffers.data[i]
+		return strings.clone_to_cstring(string(sl_slice(char_buffer)))
+	}
+
+	draw_cursor :: proc(x: i32, y: i32, i_ins: u32, i_param: u32) {
+		cstr          := lookup_buffer(i_ins, i_param)
+		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
+		cursor_offset := ray.MeasureText(first_half, config.editor_font_size)
+		cursor_x      := x + cursor_offset
+		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
+	}
+
+	i_ins: u32 = 0
+	x: i32 = editor_left_padding
+	y: i32 = 0
+	line_number_x: i32 = editor_left_padding / 2 //TODO: gambiarra
+
+	buffers := sl_slice(&main_cpu.editing_buffers)
+	for line := 0; line < len(buffers); line += 4 {
+
+		labels := sl_slice(&main_cpu.labels)
+		for i := 0; i < len(labels); i += 1 {
+			label := &labels[i]
+
+			if label.line == u16(i_ins) {
+				tmp  := sl_slice(&label.name)
+				cstr := strings.clone_to_cstring(string(tmp))
+
+				y += editor_label_y_offset
+				ray.DrawText(ray.TextFormat("%s:", cstr), 
+					editor_label_x_offset, y, editor_font_size, ray.LIGHTGRAY)
+				y += editor_line_height
+			}
+		}
+
+		ray.DrawText(ray.TextFormat("%d", i_ins), line_number_x, y, editor_font_size, ray.GRAY)
+
+		tmp_x := x
+
+		ray.DrawText(get_buffer_cstr(line), tmp_x, y, editor_font_size, get_color(i_ins, 0))
+		if cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
+
+		tmp_x += editor_mnemonic_left_margin
+
+		for i: u32 = 1; i < 4; i += 1 {
+			ray.DrawText(get_buffer_cstr(line + int(i)), tmp_x, y, editor_font_size, get_color(i_ins, i))
+			if cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
+
+			tmp_x += editor_param_left_margin
+		}
+
+		y     += editor_line_height
+		i_ins += 1
+	}
 }
 
 process_input :: proc() {
@@ -389,30 +468,33 @@ process_input :: proc() {
 
 	if ray.IsKeyPressed(.UP) && cursor.ins > 0 {
 		cursor.ins -= 1
-        check_line(cursor.ins + 1)
 		update_param_cursor()
 		update_char_cursor()
 	}
 		
 	if ray.IsKeyPressed(.DOWN) && cursor.ins < (main_cpu.instructions.len - 1) {
 		cursor.ins += 1
-        check_line(cursor.ins - 1)
 		update_param_cursor()
 		update_char_cursor()
 	}
 
 	left  := ray.IsKeyPressed(.LEFT)
 	right := ray.IsKeyPressed(.RIGHT)
+	l     := ray.IsKeyPressed(.L)
 	if ray.IsKeyDown(.LEFT_CONTROL) {
 		if left && cursor.param > 0 {
 			cursor.param -= 1
 			update_char_cursor()
 		}
 
-		param_qnt := get_instruction_param_qnt(main_cpu.instructions.data[cursor.ins].type)
-		if right && cursor.param < u32(param_qnt) {
+		fmt.println(cursor)
+		if right && cursor.param < 4 {
 			cursor.param += 1
 			update_char_cursor()
+		}
+
+		if l {
+			push_label("LABEL", u16(cursor.ins))
 		}
 	} else {
 		if left {
@@ -434,9 +516,9 @@ process_input :: proc() {
 
 			cstr      := lookup_buffer(cursor.ins, cursor.param)
 			length    := u32(len(cstr))
-			param_qnt := get_instruction_param_qnt(main_cpu.instructions.data[cursor.ins].type)
+			fmt.println(length)
 			if cursor.char > length {
-				if cursor.param < u32(param_qnt) {
+				if cursor.param < 4 {
 					cursor.param += 1
 					cursor.char = 0
 				} else {
@@ -448,14 +530,13 @@ process_input :: proc() {
 
 	if ray.IsKeyPressed(.ENTER) {
 		cursor.ins += 1
-		check_line(cursor.ins - 1)
 		sl_insert(&main_cpu.instructions, Instruction{ type=.Nop }, u32(cursor.ins))
 		update_param_cursor()
 		update_char_cursor()
 	}
 		
 	if ray.IsKeyPressed(.DELETE) {
-		sl_remove(&main_cpu.instructions, u32(cursor.ins))
+		sl_remove(&main_cpu.editing_buffers, u32(cursor.ins))
 	}
 
 	char_buffer := &main_cpu.editing_buffers.data[cursor.ins * 4 + cursor.param]
@@ -504,8 +585,10 @@ main :: proc() {
 
 	set_buffer(0, 0, "nopis")
 	set_buffer(1, 0, "adding")
+	set_buffer(1, 1, "r0")
+	set_buffer(1, 2, "100")
 
-	push_label("LOOP", 3)
+	push_label("LOOP", 1)
 
 	config.editor_font = ray.GetFontDefault()
     ray.InitWindow(config.window_width, config.window_height, "PISC Experience");
@@ -517,7 +600,7 @@ main :: proc() {
 
         ray.ClearBackground(ray.BLACK)
 
-        check_line(cursor.ins)
+        //check_line(cursor.ins)
 
         process_input()
 
