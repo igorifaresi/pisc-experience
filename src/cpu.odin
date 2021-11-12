@@ -112,7 +112,6 @@ Instruction :: struct {
 	imediate_as_label: bool,
 	p0, p1:            u8,
 	p2:                i16,
-	not_editing:       bool,
 }
 
 Label :: struct {
