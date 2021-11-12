@@ -154,6 +154,11 @@ lookup_buffer :: proc(i_ins: u32, i_param: u32) -> cstring {
 	return strings.clone_to_cstring(string(sl_slice(char_buffer)))
 }
 
+lookup_label :: proc(label: u32) -> cstring {
+	tmp  := sl_slice(&main_cpu.labels.data[label].name)
+	return strings.clone_to_cstring(string(tmp))
+}
+
 set_buffer :: proc(i_ins: u32, i_param: u32, str: string) {
 	idx := i_ins * 4 + i_param
 	char_buffer := &main_cpu.editing_buffers.data[idx]
@@ -392,7 +397,7 @@ draw_editor :: proc() {
 	using config
 
 	get_color :: proc(i_ins: u32, i_param: u32) -> ray.Color {		
-		if cursor.ins == i_ins && cursor.param == i_param {
+		if !cursor.in_label && cursor.ins == i_ins && cursor.param == i_param {
 			return ray.YELLOW
 		}
 
@@ -412,6 +417,13 @@ draw_editor :: proc() {
 		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
 	}
 
+	draw_cursor_label :: proc(x: i32, y: i32, cstr: cstring) {
+		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
+		cursor_offset := ray.MeasureText(first_half, config.editor_font_size)
+		cursor_x      := x + cursor_offset
+		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
+	}
+
 	i_ins: u32 = 0
 	x: i32 = editor_left_padding
 	y: i32 = 0
@@ -425,12 +437,17 @@ draw_editor :: proc() {
 			label := &labels[i]
 
 			if label.line == u16(i_ins) {
-				tmp  := sl_slice(&label.name)
-				cstr := strings.clone_to_cstring(string(tmp))
+				cstr := lookup_label(u32(i))
+				c := ray.LIGHTGRAY
+				if cursor.in_label && cursor.label == u32(i) do c = ray.YELLOW
 
 				y += editor_label_y_offset
 				ray.DrawText(ray.TextFormat("%s:", cstr), 
-					editor_label_x_offset, y, editor_font_size, ray.LIGHTGRAY)
+					editor_label_x_offset, y, editor_font_size, c)
+
+				if cursor.in_label && cursor.label == u32(i) {
+					draw_cursor_label(editor_label_x_offset, y, cstr)
+				}
 				y += editor_line_height
 			}
 		}
@@ -463,15 +480,81 @@ process_input :: proc() {
 		if cursor.char >= length do cursor.char = length
 	}
 
-	if ray.IsKeyPressed(.UP) && cursor.ins > 0 {
-		cursor.ins -= 1
-		update_char_cursor()
+	move_up :: proc() {
+		found_label := false
+
+		labels := sl_slice(&main_cpu.labels)
+		for i := 0; i < len(labels); i += 1 {
+			label := &labels[i]
+
+			for label.line == u16(cursor.ins) {
+				found_label  = true
+				cursor.label = u32(i)
+				i += 1
+				if i < len(labels) { label = &labels[i] } else { break }
+			}
+
+			if found_label do break
+		}
+
+		if !found_label {
+			cursor.ins -= 1
+			update_char_cursor()
+		} else {
+			cursor.in_label = true
+			fmt.println(cursor)
+		}
 	}
+
+	move_down :: proc() {
+		if !cursor.in_label {
+			cursor.ins += 1
+
+			found_label := false
+
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				label := &labels[i]
+
+				if label.line == u16(cursor.ins) {
+					found_label  = true
+					cursor.label = u32(i)
+					break
+				}
+			}
+
+			if !found_label {
+				if cursor.ins < (main_cpu.editing_buffers.len/4) {
+					update_char_cursor()
+				} else {
+					cursor.ins -= 1
+				}
+			} else {
+				cursor.in_label = true
+			}
+		} else if cursor.in_label {
+			has_label_below := false
+			actual_label    := &main_cpu.labels.data[cursor.label]
+
+			if cursor.label < (main_cpu.labels.len - 1) {
+				below_label  := &main_cpu.labels.data[cursor.label + 1]
+				if actual_label.line == below_label.line {
+					cursor.label += 1
+					has_label_below = true
+				}
+			}
+
+			if !has_label_below && u32(actual_label.line) < (main_cpu.editing_buffers.len/4) {
+				cursor.ins      = u32(actual_label.line)
+				cursor.in_label = false
+				update_char_cursor()
+			}
+		}		
+	}
+
+	if ray.IsKeyPressed(.UP) && cursor.ins > 0 do move_up()
 		
-	if ray.IsKeyPressed(.DOWN) && cursor.ins < (main_cpu.editing_buffers.len/4 - 1) {
-		cursor.ins += 1
-		update_char_cursor()
-	}
+	if ray.IsKeyPressed(.DOWN) do move_down()
 
 	left  := ray.IsKeyPressed(.LEFT)
 	right := ray.IsKeyPressed(.RIGHT)
@@ -508,14 +591,21 @@ process_input :: proc() {
 		if right {
 			cursor.char += 1
 
-			cstr      := lookup_buffer(cursor.ins, cursor.param)
-			length    := u32(len(cstr))
-			fmt.println(length)
-			if cursor.char > length {
-				if cursor.param < 3 {
-					cursor.param += 1
-					cursor.char = 0
-				} else {
+			if !cursor.in_label {
+	 			cstr      := lookup_buffer(cursor.ins, cursor.param)
+				length    := u32(len(cstr))
+				if cursor.char > length {
+					if cursor.param < 3 {
+						cursor.param += 1
+						cursor.char = 0
+					} else {
+						cursor.char = length
+					}
+				}
+			} else {
+				cstr   := lookup_label(cursor.label)
+				length := u32(len(cstr))
+				if cursor.char > length {
 					cursor.char = length
 				}
 			}
@@ -523,31 +613,46 @@ process_input :: proc() {
 	}
 
 	if ray.IsKeyPressed(.ENTER) {
-		cursor.ins += 1
-
 		clean_buffer: Static_List(byte, 16)
 
-		idx := u32(cursor.ins)*4	
+		idx: u32 
+		if !cursor.in_label {
+			idx = u32(cursor.ins + 1)
+		} else {
+			idx = u32(main_cpu.labels.data[cursor.label].line)
+		}
+		idx *= 4
+
 		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
 		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
 		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
 		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
 		
+		move_down()
+
 		cursor.param = 0
-		cursor.char  = 0
 	}
 		
 	if ray.IsKeyPressed(.DELETE) {
-		idx := u32(cursor.ins)*4
-		sl_remove(&main_cpu.editing_buffers, idx)
-		sl_remove(&main_cpu.editing_buffers, idx)
-		sl_remove(&main_cpu.editing_buffers, idx)
-		sl_remove(&main_cpu.editing_buffers, idx)
+		if !cursor.in_label {
+			idx := u32(cursor.ins)*4
+			sl_remove(&main_cpu.editing_buffers, idx)
+			sl_remove(&main_cpu.editing_buffers, idx)
+			sl_remove(&main_cpu.editing_buffers, idx)
+			sl_remove(&main_cpu.editing_buffers, idx)
 
-		if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
+			if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
+		} else {
+			sl_remove(&main_cpu.labels, u32(cursor.label))
+		}
 	}
 
-	char_buffer := &main_cpu.editing_buffers.data[cursor.ins * 4 + cursor.param]
+	char_buffer: ^Static_List(byte, 16)
+	if !cursor.in_label {
+		char_buffer = &main_cpu.editing_buffers.data[cursor.ins * 4 + cursor.param]
+	} else {
+		char_buffer = &main_cpu.labels.data[cursor.label].name
+	}
 
 	if ray.IsKeyPressed(.BACKSPACE) && cursor.char > 0 {
 		sl_remove(char_buffer, cursor.char - 1)
