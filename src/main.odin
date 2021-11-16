@@ -14,9 +14,10 @@ Config :: struct {
 	editor_left_padding:         i32,
 	editor_mnemonic_left_margin: i32,
 	editor_param_left_margin:    i32,
-	editor_font:            ray.Font,
+	editor_font:                 ray.Font,
 	editor_label_y_offset:       i32,
 	editor_label_x_offset:       i32,
+	editor_line_highlight_color: ray.Color,
 	memory_font_size:            i32, 
 }
 
@@ -33,6 +34,12 @@ BufferStatus :: enum {
 	Invalid,
 }
 
+ExecutionStatus :: enum {
+	Editing,
+	Running,
+	Waiting,
+}
+
 main_cpu: CPU
 config := Config{
 	window_width=1200,
@@ -45,13 +52,14 @@ config := Config{
 	editor_param_left_margin=60,
 	editor_label_y_offset=12,
 	editor_label_x_offset=8,
+	editor_line_highlight_color=ray.Color{42, 42, 42, 255},
 	memory_font_size=16,
 }
 cursor: Cursor
-
 buffer_status: [MAX_INSTRUCTIONS*4]BufferStatus
-has_errs := false
-err_qnt  := 0
+has_errs         := false
+err_qnt          := 0
+execution_status := ExecutionStatus.Editing
 
 compile :: proc() -> (success := true, err_qnt: int) {
 	sl_clear(&main_cpu.instructions)
@@ -312,6 +320,10 @@ draw_memory :: proc() {
 		i += 1
 	}
 
+	x = window_width - 730 + 7*90
+	ray.DrawText("pc:", x, y, memory_font_size, ray.GRAY)
+	ray.DrawText(ray.TextFormat("%d", main_cpu.pc), x + 32, y, memory_font_size, ray.LIGHTGRAY)
+
 	x = window_width - 80*3
 	y = 0
 	i = 0
@@ -349,7 +361,7 @@ draw_editor :: proc() {
 	using config
 
 	get_color :: proc(i_ins: u32, i_param: u32) -> ray.Color {		
-		if !cursor.in_label && cursor.ins == i_ins && cursor.param == i_param {
+		if execution_status == .Editing && !cursor.in_label && cursor.ins == i_ins && cursor.param == i_param {
 			return ray.YELLOW
 		}
 
@@ -387,6 +399,8 @@ draw_editor :: proc() {
 	y: i32 = 0
 	line_number_x: i32 = editor_left_padding / 2 //TODO: gambiarra
 
+	highlight_line_width := window_width - 730 - 8
+
 	buffers := sl_slice(&main_cpu.editing_buffers)
 	for line := 0; line < len(buffers); line += 4 {
 
@@ -410,22 +424,30 @@ draw_editor :: proc() {
 			}
 		}
 
+		if execution_status == .Waiting && u16(i_ins) == main_cpu.pc {
+			ray.DrawRectangle(0, y, highlight_line_width, editor_font_size, editor_line_highlight_color)
+		}
+
 		ray.DrawText(ray.TextFormat("%d", i_ins), line_number_x, y, editor_font_size, ray.GRAY)
 
 		tmp_x := x
 
 		cstr := get_buffer_cstr(line)
 		ray.DrawText(cstr, tmp_x, y, editor_font_size, get_color(i_ins, 0))
-		if !cursor.in_label && cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
-		if buffer_status[line] == .Invalid do draw_err_indication(tmp_x, y, cstr)
+		if execution_status == .Editing {
+			if !cursor.in_label && cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
+			if buffer_status[line] == .Invalid do draw_err_indication(tmp_x, y, cstr)
+		}
 
 		tmp_x += editor_mnemonic_left_margin
 
 		for i: u32 = 1; i < 4; i += 1 {
 			cstr := get_buffer_cstr(line + int(i))
 			ray.DrawText(cstr, tmp_x, y, editor_font_size, get_color(i_ins, i))
-			if !cursor.in_label && cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
-			if buffer_status[line + int(i)] == .Invalid do draw_err_indication(tmp_x, y, cstr)
+			if execution_status == .Editing {
+				if !cursor.in_label && cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
+				if buffer_status[line + int(i)] == .Invalid do draw_err_indication(tmp_x, y, cstr)
+			}
 
 			tmp_x += editor_param_left_margin
 		}
@@ -435,7 +457,38 @@ draw_editor :: proc() {
 	}
 }
 
-process_input :: proc() {
+set_gamepad_flags :: proc() {
+	v: u16
+
+	if ray.IsKeyDown(.UP)    do v |= u16(Gamepad_Entries.Up)
+	if ray.IsKeyDown(.DOWN)  do v |= u16(Gamepad_Entries.Down)
+	if ray.IsKeyDown(.LEFT)  do v |= u16(Gamepad_Entries.Left)
+	if ray.IsKeyDown(.RIGHT) do v |= u16(Gamepad_Entries.Right)
+
+	if ray.IsKeyDown(.A) do v |= u16(Gamepad_Entries.A)
+	if ray.IsKeyDown(.B) do v |= u16(Gamepad_Entries.B)
+	if ray.IsKeyDown(.Z) do v |= u16(Gamepad_Entries.X)
+	if ray.IsKeyDown(.X) do v |= u16(Gamepad_Entries.Y)
+
+	if ray.IsKeyDown(.D)           do v |= u16(Gamepad_Entries.L)
+	if ray.IsKeyDown(.C)           do v |= u16(Gamepad_Entries.R)
+	if ray.IsKeyDown(.ENTER)       do v |= u16(Gamepad_Entries.Start)
+	if ray.IsKeyDown(.RIGHT_SHIFT) do v |= u16(Gamepad_Entries.Select)
+
+	if ray.IsMouseButtonDown(.LEFT)  do v |= u16(Gamepad_Entries.MouseLeft)
+	if ray.IsMouseButtonDown(.RIGHT) do v |= u16(Gamepad_Entries.MouseRight)
+
+	wheel := ray.GetMouseWheelMove()
+	if wheel > 0 {
+		v |= u16(Gamepad_Entries.MouseWheelUp)
+	} else if wheel < 0 {
+		v |= u16(Gamepad_Entries.MouseWheelDown)
+	}
+
+	main_cpu.reg_table[int(Register_Type.gp)] = i16(v)
+}
+
+process_editor_input :: proc() {
 	update_char_cursor :: proc() {
 		length: u32
 
@@ -700,7 +753,11 @@ main :: proc() {
 
         //check_line(cursor.ins)
 
-        process_input()
+        if execution_status == .Editing {
+        	process_editor_input() //TODO
+        } else {
+        	set_gamepad_flags()
+        }
 
         draw_editor()
         draw_memory()
@@ -708,6 +765,24 @@ main :: proc() {
         draw_video_buffer()
 
         has_errs, err_qnt = compile()
+
+        if execution_status == .Waiting {
+        	
+        	if ray.IsKeyPressed(.F7) {
+        		cpu_clock(&main_cpu)
+        	}
+        	
+        	if ray.IsKeyPressed(.E) {
+        		execution_status = .Editing
+        	}
+
+        } else if execution_status == .Editing {
+
+        	if ray.IsKeyPressed(.F3) {
+        		main_cpu.pc = 0
+        		execution_status = .Waiting
+        	}
+        }
 
         ray.EndDrawing()
     }

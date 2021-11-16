@@ -1,14 +1,34 @@
 package pisc
 
+Gamepad_Entries :: enum u16 {
+	Up             = 1,
+	Down           = 1 << 1,
+	Left           = 1 << 2,
+	Right          = 1 << 3,
+	A              = 1 << 4,
+	B              = 1 << 5,
+	X              = 1 << 6,
+	Y              = 1 << 7,
+	L              = 1 << 8,
+	R              = 1 << 9,
+	Start          = 1 << 10,
+	Select         = 1 << 11,
+	MouseLeft      = 1 << 12,
+	MouseRight     = 1 << 13,
+	MouseWheelUp   = 1 << 14,
+	MouseWheelDown = 1 << 15,
+}
+
 Instruction_Type :: enum u8 {
-	Add,   Sub,   Mul, Div,
-	Or,    And,   Not, Xor,
-	Load,  Store, Move,
-	Sl,    Sr,
-	Ceq,   Cgt,   Clt,
-	Jmp,   Jt,    Jf,
-	Vpoke, Vpeek, Vswap,
-	Call,  Ret,   Nop,
+	Add,    Sub,    Mul, Div,
+	Or,     And,    Not, Xor,
+	Load,   Store,  Move,
+	Sl,     Sr,
+	Ceq,    Cgt,    Clt,
+	Jmp,    Jt,     Jf,
+	Vpoke,  Vpeek,  Vswap,
+	Mpeekx, Mpeeky,
+	Call,   Ret,    Nop,
 }
 
 Instruction_Param_Type :: enum u8 {
@@ -33,6 +53,8 @@ instruction_param_type_table := map[Instruction_Type]Instruction_Param_Type {
 	.Jmp = .Reg_Or_Imediate, .Jt = .Reg_Or_Imediate, .Jf = .Reg_Or_Imediate,
 	
 	.Vpoke = .Reg, .Vpeek = .Reg, .Vswap = .Nothing,
+
+	.Mpeekx = .Reg, .Mpeeky = .Reg,
 	
 	.Call = .Reg_Or_Imediate, .Ret = .Nothing, .Nop = .Nothing,
 }
@@ -50,14 +72,15 @@ get_instruction_param_qnt :: proc(ins: Instruction_Type) -> int {
 }
 
 mnemonics_table := map[cstring]Instruction_Type {
-	"add"   = .Add  , "sub"   = .Sub  , "mul"   = .Mul , "div" = .Div,
-	"or"    = .Or   , "and"   = .And  , "not"   = .Not , "xor" = .Xor,
-	"load"  = .Load , "store" = .Store, "move"  = .Move,
-	"sl"    = .Sl   , "sr"    = .Sr   ,
-	"ceq"   = .Ceq  , "cgt"   = .Cgt  , "clt"   = .Clt ,
-	"jmp"   = .Jmp  , "jt"    = .Jt   , "jf"    = .Jf  ,
-	"vpoke" = .Vpoke, "vpeek" = .Vpeek, "vswap" = .Vswap,
-	"call"  = .Call , "ret"   = .Ret  , "nop"   = .Nop,
+	"add"    = .Add   , "sub"    = .Sub   , "mul"   = .Mul , "div" = .Div,
+	"or"     = .Or    , "and"    = .And   , "not"   = .Not , "xor" = .Xor,
+	"load"   = .Load  , "store"  = .Store , "move"  = .Move,
+	"sl"     = .Sl    , "sr"     = .Sr    ,
+	"ceq"    = .Ceq   , "cgt"    = .Cgt   , "clt"   = .Clt ,
+	"jmp"    = .Jmp   , "jt"     = .Jt    , "jf"    = .Jf  ,
+	"vpoke"  = .Vpoke , "vpeek"  = .Vpeek , "vswap" = .Vswap,
+	"mpeekx" = .Mpeekx, "mpeeky" = .Mpeeky,
+	"call"   = .Call  , "ret"    = .Ret   , "nop"   = .Nop,
 }
 
 instruction_type_to_str :: proc(t: Instruction_Type) -> cstring {
@@ -81,6 +104,8 @@ Register_Type :: enum u8 {
 	sp , pc, // special
 	
 	x  , y, // coordinates
+
+	gp, // input
 }
 
 registers_table := map[cstring]Register_Type {
@@ -94,6 +119,8 @@ registers_table := map[cstring]Register_Type {
 	"sp" = .sp, "pc" = .pc,
 
 	"x" = .x, "y" = .y,
+
+	"gp" = .gp,
 }
 
 register_type_to_str :: proc(t: Register_Type) -> cstring {
@@ -121,8 +148,6 @@ Label :: struct {
 
 MAX_INSTRUCTIONS :: 1024 * 16
 
-REG_SP :: 30
-
 CPU :: struct {
 	reg_table: [31]i16,
 
@@ -140,71 +165,78 @@ CPU :: struct {
 }
 
 cpu_clock :: proc(using cpu: ^CPU) {
+	if u32(cpu.pc) >= cpu.instructions.len do return
 
-	for inst, idx in sl_slice(&cpu.instructions) {
-		b := inst.imediate ? inst.p2 : reg_table[inst.p1]
+	inst := cpu.instructions.data[cpu.pc]
 
-		switch inst.type {
+	cpu.pc += 1
 
-		case .Add: reg_table[inst.p0] += b
-		case .Sub: reg_table[inst.p0] -= b
-		case .Mul: reg_table[inst.p0] *= b
-		case .Div: reg_table[inst.p0] /= b
-		case .Or:  reg_table[inst.p0] |= b
-		case .And: reg_table[inst.p0] &= b
-		case .Xor: reg_table[inst.p0] &~= b // Note: Maybe this is XOR???
-		case .Not: reg_table[inst.p0] ~= reg_table[inst.p0]
+	b := inst.imediate ? inst.p2 : reg_table[inst.p1]
 
-		case .Load:
-			addr := reg_table[inst.p1] + inst.p2
-			mem_l := u16(mem[addr])
-			mem_h := u16(mem[addr + 1]) << 8
-			reg_table[inst.p0] = transmute(i16)(mem_l | mem_h)
+	switch inst.type {
 
-		case .Store:
-			addr  := reg_table[inst.p1] + inst.p2
-			value := transmute(u16)(reg_table[inst.p0])
-			mem[addr]     = cast(byte)(value & 0xff)
-			mem[addr + 1] = cast(byte)(value >> 8)
+	case .Add: reg_table[inst.p0] += b
+	case .Sub: reg_table[inst.p0] -= b
+	case .Mul: reg_table[inst.p0] *= b
+	case .Div: reg_table[inst.p0] /= b
+	case .Or:  reg_table[inst.p0] |= b
+	case .And: reg_table[inst.p0] &= b
+	case .Xor: reg_table[inst.p0] &~= b // Note: Maybe this is XOR???
+	case .Not: reg_table[inst.p0] ~= reg_table[inst.p0]
 
-		case .Move: reg_table[inst.p0] = b
-		case .Sl:   reg_table[inst.p0] <<= cast(u8)b
-		case .Sr:   reg_table[inst.p0] >>= cast(u8)b
-		case .Ceq:  cmp_flag = reg_table[inst.p0] == b
-		case .Cgt:  cmp_flag = reg_table[inst.p0] > b
-		case .Clt:  cmp_flag = reg_table[inst.p0] < b
-		case .Jmp:  pc = labels.data[inst.p2].line
+	case .Load:
+		addr := reg_table[inst.p1] + inst.p2
+		mem_l := u16(mem[addr])
+		mem_h := u16(mem[addr + 1]) << 8
+		reg_table[inst.p0] = transmute(i16)(mem_l | mem_h)
 
-		case .Jt:
-			if cmp_flag {
-				pc = labels.data[inst.p2].line
-			}
+	case .Store:
+		addr  := reg_table[inst.p1] + inst.p2
+		value := transmute(u16)(reg_table[inst.p0])
+		mem[addr]     = cast(byte)(value & 0xff)
+		mem[addr + 1] = cast(byte)(value >> 8)
 
-		case .Jf:
-			if !cmp_flag {
-				pc = labels.data[inst.p2].line
-			}
+	case .Move: reg_table[inst.p0] = b
+	case .Sl:   reg_table[inst.p0] <<= cast(u8)b
+	case .Sr:   reg_table[inst.p0] >>= cast(u8)b
+	case .Ceq:  cmp_flag = reg_table[inst.p0] == b
+	case .Cgt:  cmp_flag = reg_table[inst.p0] > b
+	case .Clt:  cmp_flag = reg_table[inst.p0] < b
+	case .Jmp:  pc = labels.data[inst.p2].line
 
-		case .Vpoke:
-			addr  := reg_table[inst.p1] + inst.p2
-			value := transmute(u16)(reg_table[inst.p0])
-			gpu.buffer[addr] = value
-
-		case .Vpeek:
-			addr := reg_table[inst.p1] + inst.p2
-			reg_table[inst.p0] = transmute(i16)(gpu.buffer[addr])
-
-		case .Call:
-			sl_push(&call_stack, pc)
+	case .Jt:
+		if cmp_flag {
 			pc = labels.data[inst.p2].line
+		}
 
-		case .Ret:
-			pc = sl_pop(&call_stack)
+	case .Jf:
+		if !cmp_flag {
+			pc = labels.data[inst.p2].line
+		}
 
-		case .Vswap:
+	case .Vpoke:
+		addr  := reg_table[int(Register_Type.x)] + reg_table[int(Register_Type.y)] * GPU_BUFFER_W
+		value := transmute(u16)(reg_table[inst.p0])
+		gpu.buffer[addr] = value
 
-		case .Nop:
-		} // end switch
-	}
+	case .Vpeek:
+		addr := reg_table[inst.p1] + inst.p2
+		reg_table[inst.p0] = transmute(i16)(gpu.buffer[addr])
+
+	case .Mpeekx:
+
+	case .Mpeeky:
+
+	case .Call:
+		sl_push(&call_stack, pc)
+		pc = labels.data[inst.p2].line
+
+	case .Ret:
+		pc = sl_pop(&call_stack)
+
+	case .Vswap:
+
+	case .Nop:
+	} // end switch
 }
 
