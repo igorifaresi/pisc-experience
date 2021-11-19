@@ -82,6 +82,24 @@ compile :: proc() -> (success := true, err_qnt: int) {
 	return
 }
 
+check_label :: proc(str: string) -> (number: i16, found := false) {
+	labels := sl_slice(&main_cpu.labels)
+	for i := 0; i < len(labels); i += 1 {
+		label := &labels[i]
+
+		tmp := sl_slice(&label.name)
+		label_str := string(tmp)
+
+		if str == label_str {
+			number = i16(i)
+			found  = true
+			return
+		} 
+	}
+
+	return
+}
+
 compile_line :: proc(line: u32) -> (ins: Instruction, success := true) {
 	cstr: cstring
 
@@ -221,8 +239,14 @@ compile_line :: proc(line: u32) -> (ins: Instruction, success := true) {
 				ins.p2 = i16(imediate)
 				ins.imediate = true
 			} else {
-				buffer_status[buffer_idx + 1] = .Invalid
-				success = false
+				label_idx, found := check_label(string(buff))
+				if found {
+					ins.p2 = label_idx
+					ins.imediate = true
+				} else {
+					buffer_status[buffer_idx + 1] = .Invalid
+					success = false
+				}
 			}
 		}
 	
@@ -746,6 +770,10 @@ main :: proc() {
 
     ray.SetTargetFPS(60);
 
+    //toggle_fullscreen()
+
+    f := ray.LoadFont("assets/Inconsolata-Regular.ttf") 
+
     for !ray.WindowShouldClose() {
         ray.BeginDrawing()
 
@@ -783,6 +811,8 @@ main :: proc() {
         		execution_status = .Waiting
         	}
         }
+
+        ray.DrawTextEx(f, "Samuel é feio", ray.Vector2{300, 400}, 30.0, 1, ray.GRAY)
 
         ray.EndDrawing()
     }
