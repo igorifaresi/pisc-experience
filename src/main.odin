@@ -419,14 +419,14 @@ draw_editor :: proc() {
 	draw_cursor :: proc(x: i32, y: i32, i_ins: u32, i_param: u32) {
 		cstr          := lookup_buffer(i_ins, i_param)
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
-		cursor_offset := ray.MeasureText(first_half, config.editor_font_size)
+		cursor_offset := i32(ray.MeasureTextEx(config.editor_font, first_half, f32(config.editor_font_size), 1.0).x)
 		cursor_x      := x + cursor_offset
 		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
 	}
 
 	draw_cursor_label :: proc(x: i32, y: i32, cstr: cstring) {
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
-		cursor_offset := ray.MeasureText(first_half, config.editor_font_size)
+		cursor_offset := i32(ray.MeasureTextEx(config.editor_font, first_half, f32(config.editor_font_size), 1.0).x)
 		cursor_x      := x + cursor_offset
 		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
 	}
@@ -795,8 +795,8 @@ main :: proc() {
 
     //toggle_fullscreen()
 
-    config.editor_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.editor_font_size, nil, 0) 
-    config.memory_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.memory_font_size, nil, 0) 
+    config.editor_font = ray.LoadFontEx("assets/3270-Regular.ttf", config.editor_font_size, nil, 0) 
+    config.memory_font = ray.LoadFontEx("assets/3270-Regular.ttf", config.memory_font_size, nil, 0)
 
     for !ray.WindowShouldClose() {
         ray.BeginDrawing()

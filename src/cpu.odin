@@ -25,7 +25,7 @@ Instruction_Type :: enum u8 {
 	Load,   Store,  Move,
 	Sl,     Sr,
 	Ceq,    Cgt,    Clt,
-	Jmp,    Jt,     Jf,
+	Jmp,    Jt,     Jf,  Cmp,
 	Vpoke,  Vpeek,  Vswap,
 	Mpeekx, Mpeeky,
 	Call,   Ret,    Nop,
@@ -50,7 +50,7 @@ instruction_param_type_table := map[Instruction_Type]Instruction_Param_Type {
 	
 	.Ceq = .Reg_And_Reg_Or_Imediate, .Cgt = .Reg_And_Reg_Or_Imediate, .Clt = .Reg_And_Reg_Or_Imediate,
 	
-	.Jmp = .Reg_Or_Imediate, .Jt = .Reg_Or_Imediate, .Jf = .Reg_Or_Imediate,
+	.Jmp = .Reg_Or_Imediate, .Jt = .Reg_Or_Imediate, .Jf = .Reg_Or_Imediate, .Cmp = .Reg_And_Reg_Or_Imediate,
 	
 	.Vpoke = .Reg, .Vpeek = .Reg, .Vswap = .Nothing,
 
@@ -77,7 +77,7 @@ mnemonics_table := map[cstring]Instruction_Type {
 	"load"   = .Load  , "store"  = .Store , "move"  = .Move,
 	"sl"     = .Sl    , "sr"     = .Sr    ,
 	"ceq"    = .Ceq   , "cgt"    = .Cgt   , "clt"   = .Clt ,
-	"jmp"    = .Jmp   , "jt"     = .Jt    , "jf"    = .Jf  ,
+	"jmp"    = .Jmp   , "jt"     = .Jt    , "jf"    = .Jf, "cmp" = .Cmp,
 	"vpoke"  = .Vpoke , "vpeek"  = .Vpeek , "vswap" = .Vswap,
 	"mpeekx" = .Mpeekx, "mpeeky" = .Mpeeky,
 	"call"   = .Call  , "ret"    = .Ret   , "nop"   = .Nop,
@@ -213,6 +213,9 @@ cpu_clock :: proc(using cpu: ^CPU) {
 		if !cmp_flag {
 			pc = labels.data[inst.p2].line
 		}
+
+	case .Cmp:
+		cmp_flag = reg_table[inst.p0] == b
 
 	case .Vpoke:
 		addr  := reg_table[int(Register_Type.x)] + reg_table[int(Register_Type.y)] * GPU_BUFFER_W
