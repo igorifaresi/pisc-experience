@@ -6,19 +6,25 @@ import "core:strings"
 import ray "vendor:raylib"
 
 Config :: struct {
-	window_width:                i32,
-	window_height:               i32,
-	editor_font_size:            i32,
-	editor_line_height:          i32,
-	editor_top_padding:          i32,
-	editor_left_padding:         i32,
-	editor_mnemonic_left_margin: i32,
-	editor_param_left_margin:    i32,
-	editor_font:                 ray.Font,
-	editor_label_y_offset:       i32,
-	editor_label_x_offset:       i32,
-	editor_line_highlight_color: ray.Color,
-	memory_font_size:            i32, 
+	window_width:                 i32,
+	window_height:                i32,
+	background_color:             ray.Color,
+	editor_font_size:             i32,
+	editor_line_height:           i32,
+	editor_top_padding:           i32,
+	editor_left_padding:          i32,
+	editor_mnemonic_left_margin:  i32,
+	editor_param_left_margin:     i32,
+	editor_font:                  ray.Font,
+	editor_label_y_offset:        i32,
+	editor_label_x_offset:        i32,
+	editor_line_highlight_color:  ray.Color,
+	editor_error_highlight_color: ray.Color,
+	editor_font_color:            ray.Color,
+	memory_font:                  ray.Font,
+	memory_font_size:             i32, 
+	memory_label_font_color:      ray.Color,
+	memory_value_font_color:      ray.Color,
 }
 
 Cursor :: struct {
@@ -44,6 +50,7 @@ main_cpu: CPU
 config := Config{
 	window_width=1200,
 	window_height=600,
+	background_color=ray.Color{30, 31, 25, 255},
 	editor_font_size=20,
 	editor_line_height=20,
 	editor_top_padding=64,
@@ -52,8 +59,12 @@ config := Config{
 	editor_param_left_margin=60,
 	editor_label_y_offset=12,
 	editor_label_x_offset=8,
-	editor_line_highlight_color=ray.Color{42, 42, 42, 255},
+	editor_line_highlight_color=ray.Color{70, 70, 70, 255},
+	editor_error_highlight_color=ray.Color{249, 36, 72, 255},
+	editor_font_color=ray.WHITE,
 	memory_font_size=16,
+	memory_label_font_color=ray.Color{221, 199, 79, 255},
+	memory_value_font_color=ray.WHITE,
 }
 cursor: Cursor
 buffer_status: [MAX_INSTRUCTIONS*4]BufferStatus
@@ -315,20 +326,28 @@ draw_video_buffer :: proc() {
 draw_status :: proc(err_qnt: i32) {
 	using config
 
+	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
 	x: i32 = window_width  - 730
 	y: i32 = 0
 	i: i32 = 0
-	ray.DrawText(ray.TextFormat("STATUS: RUNNING, ERRORS: %d", err_qnt),
+	draw_text(ray.TextFormat("STATUS: RUNNING, ERRORS: %d", err_qnt),
 		x, y + 8, memory_font_size, ray.LIGHTGRAY)
 }
 
 draw_memory :: proc() {
 	using config
 
+	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
 	x : i32 =  window_width  - 730
 	y : i32 = (window_height - 28*4) - 28
 	i : i32
-	ray.DrawText("REGISTERS", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	draw_text("REGISTERS", x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	for name, reg in registers_table {
 		if i%8 == 0 { 
 			y += 28
@@ -336,32 +355,32 @@ draw_memory :: proc() {
 		}
 
 		x += 90
-		ray.DrawText(ray.TextFormat("%s:", name), x, y, memory_font_size, ray.GRAY)
+		draw_text(ray.TextFormat("%s:", name), x, y, memory_font_size, memory_label_font_color)
 
 		value := main_cpu.reg_table[int(reg)]
-		ray.DrawText(ray.TextFormat("%d", value), x + 32, y, memory_font_size, ray.LIGHTGRAY)
+		draw_text(ray.TextFormat("%d", value), x + 32, y, memory_font_size, memory_value_font_color)
 
 		i += 1
 	}
 
 	x = window_width - 730 + 7*90
-	ray.DrawText("pc:", x, y, memory_font_size, ray.GRAY)
-	ray.DrawText(ray.TextFormat("%d", main_cpu.pc), x + 32, y, memory_font_size, ray.LIGHTGRAY)
+	draw_text("pc:", x, y, memory_font_size, memory_label_font_color)
+	draw_text(ray.TextFormat("%d", main_cpu.pc), x + 32, y, memory_font_size, memory_value_font_color)
 
 	x = window_width - 80*3
 	y = 0
 	i = 0
-	ray.DrawText("RAM", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	draw_text("RAM", x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	for b in main_cpu.mem[0:64] {
 		if i%4 == 0 { 
 			y += 28
 			x = window_width - 80*3
 
-			ray.DrawText(ray.TextFormat("%d", i), x, y, memory_font_size, ray.GRAY)
+			draw_text(ray.TextFormat("%d", i), x, y, memory_font_size, memory_label_font_color)
 			x += 48
 		}
 
-		ray.DrawText(ray.TextFormat("%x", b), x, y, memory_font_size, ray.LIGHTGRAY)
+		draw_text(ray.TextFormat("%x", b), x, y, memory_font_size, memory_value_font_color)
 		x += 46
 
 		i += 1
@@ -370,14 +389,14 @@ draw_memory :: proc() {
 	x =  window_width  - 730
 	y = GPU_BUFFER_H + 32
 	i = 0
-	ray.DrawText("CALL STACK", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	draw_text("CALL STACK", x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	call_stack := sl_slice(&main_cpu.call_stack)
 	if len(call_stack) != 0 {
 		for addr in call_stack {
 			//TODO
 		}
 	} else {
-		ray.DrawText("EMPTY CALL STACK", x, y + 8 + 28, memory_font_size, ray.GRAY)
+		draw_text("EMPTY CALL STACK", x, y + 8 + 28, memory_font_size, ray.GRAY)
 	}
 }
 
@@ -389,7 +408,7 @@ draw_editor :: proc() {
 			return ray.YELLOW
 		}
 
-		return ray.LIGHTGRAY
+		return config.editor_font_color
 	}
 
 	get_buffer_cstr :: proc(i: int) -> cstring {
@@ -415,7 +434,11 @@ draw_editor :: proc() {
 	draw_err_indication :: proc(x: i32, y: i32, cstr: cstring) {
 		word_size := ray.MeasureText(cstr, config.editor_font_size)
 		tmp_y := y + config.editor_font_size
-		ray.DrawLine(x, tmp_y, x + word_size, tmp_y, ray.RED)
+		ray.DrawLine(x, tmp_y, x + word_size, tmp_y, config.editor_error_highlight_color)
+	}
+
+	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	i_ins: u32 = 0
@@ -434,11 +457,11 @@ draw_editor :: proc() {
 
 			if label.line == u16(i_ins) {
 				cstr := lookup_label(u32(i))
-				c := ray.LIGHTGRAY
+				c := config.editor_font_color
 				if cursor.in_label && cursor.label == u32(i) do c = ray.YELLOW
 
 				y += editor_label_y_offset
-				ray.DrawText(ray.TextFormat("%s:", cstr), 
+				draw_text(ray.TextFormat("%s:", cstr), 
 					editor_label_x_offset, y, editor_font_size, c)
 
 				if cursor.in_label && cursor.label == u32(i) {
@@ -452,12 +475,12 @@ draw_editor :: proc() {
 			ray.DrawRectangle(0, y, highlight_line_width, editor_font_size, editor_line_highlight_color)
 		}
 
-		ray.DrawText(ray.TextFormat("%d", i_ins), line_number_x, y, editor_font_size, ray.GRAY)
+		draw_text(ray.TextFormat("%d", i_ins), line_number_x, y, editor_font_size, ray.GRAY)
 
 		tmp_x := x
 
 		cstr := get_buffer_cstr(line)
-		ray.DrawText(cstr, tmp_x, y, editor_font_size, get_color(i_ins, 0))
+		draw_text(cstr, tmp_x, y, editor_font_size, get_color(i_ins, 0))
 		if execution_status == .Editing {
 			if !cursor.in_label && cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
 			if buffer_status[line] == .Invalid do draw_err_indication(tmp_x, y, cstr)
@@ -467,7 +490,7 @@ draw_editor :: proc() {
 
 		for i: u32 = 1; i < 4; i += 1 {
 			cstr := get_buffer_cstr(line + int(i))
-			ray.DrawText(cstr, tmp_x, y, editor_font_size, get_color(i_ins, i))
+			draw_text(cstr, tmp_x, y, editor_font_size, get_color(i_ins, i))
 			if execution_status == .Editing {
 				if !cursor.in_label && cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
 				if buffer_status[line + int(i)] == .Invalid do draw_err_indication(tmp_x, y, cstr)
@@ -772,12 +795,13 @@ main :: proc() {
 
     //toggle_fullscreen()
 
-    f := ray.LoadFont("assets/Inconsolata-Regular.ttf") 
+    config.editor_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.editor_font_size, nil, 0) 
+    config.memory_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.memory_font_size, nil, 0) 
 
     for !ray.WindowShouldClose() {
         ray.BeginDrawing()
 
-        ray.ClearBackground(ray.BLACK)
+        ray.ClearBackground(config.background_color)
 
         //check_line(cursor.ins)
 
@@ -811,8 +835,6 @@ main :: proc() {
         		execution_status = .Waiting
         	}
         }
-
-        ray.DrawTextEx(f, "Samuel é feio", ray.Vector2{300, 400}, 30.0, 1, ray.GRAY)
 
         ray.EndDrawing()
     }
