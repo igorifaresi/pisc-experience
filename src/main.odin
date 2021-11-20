@@ -666,6 +666,31 @@ process_editor_input :: proc() {
 		cursor.param = 0		
 	}
 
+	delete_line :: proc() {
+		if !cursor.in_label {
+			idx := u32(cursor.ins)*4
+			sl_remove(&main_cpu.editing_buffers, idx)
+			sl_remove(&main_cpu.editing_buffers, idx)
+			sl_remove(&main_cpu.editing_buffers, idx)
+			sl_remove(&main_cpu.editing_buffers, idx)
+
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				label := &labels[i]
+
+				if label.line > u16(cursor.ins) {
+					label.line -= 1
+				}
+			}
+
+			if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
+		} else {
+			cursor.ins      = u32(main_cpu.labels.data[cursor.label].line)
+			cursor.in_label = false
+			sl_remove(&main_cpu.labels, u32(cursor.label))
+		}
+	}
+
 	if ray.IsKeyPressed(.UP)  do move_up()
 		
 	if ray.IsKeyPressed(.DOWN) do move_down()
@@ -729,30 +754,7 @@ process_editor_input :: proc() {
 
 	if ray.IsKeyPressed(.ENTER) do add_line()
 		
-	if ray.IsKeyPressed(.DELETE) {
-		if !cursor.in_label {
-			idx := u32(cursor.ins)*4
-			sl_remove(&main_cpu.editing_buffers, idx)
-			sl_remove(&main_cpu.editing_buffers, idx)
-			sl_remove(&main_cpu.editing_buffers, idx)
-			sl_remove(&main_cpu.editing_buffers, idx)
-
-			labels := sl_slice(&main_cpu.labels)
-			for i := 0; i < len(labels); i += 1 {
-				label := &labels[i]
-
-				if label.line > u16(cursor.ins) {
-					label.line -= 1
-				}
-			}
-
-			if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
-		} else {
-			cursor.ins      = u32(main_cpu.labels.data[cursor.label].line)
-			cursor.in_label = false
-			sl_remove(&main_cpu.labels, u32(cursor.label))
-		}
-	}
+	if ray.IsKeyPressed(.DELETE) do delete_line()
 
 	char_buffer: ^Static_List(byte, 16)
 	if !cursor.in_label {
@@ -828,8 +830,8 @@ main :: proc() {
 
     //toggle_fullscreen()
 
-    config.editor_font = ray.LoadFontEx("assets/3270-Regular.ttf", config.editor_font_size, nil, 0) 
-    config.memory_font = ray.LoadFontEx("assets/3270-Regular.ttf", config.memory_font_size, nil, 0)
+    config.editor_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.editor_font_size, nil, 0) 
+    config.memory_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.memory_font_size, nil, 0)
 
     for !ray.WindowShouldClose() {
         ray.BeginDrawing()
