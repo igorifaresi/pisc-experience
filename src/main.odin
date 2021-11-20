@@ -371,16 +371,20 @@ draw_memory :: proc() {
 	y = 0
 	i = 0
 	draw_text("RAM", x, y + 8, memory_font_size, ray.LIGHTGRAY)
-	for b in main_cpu.mem[0:64] {
+
+	regs_len := window_height - 28*5
+	for b := 0; b < len(main_cpu.mem); b += 1 {
 		if i%4 == 0 { 
 			y += 28
+			if y >= regs_len do break
+
 			x = window_width - 80*3
 
 			draw_text(ray.TextFormat("%d", i), x, y, memory_font_size, memory_label_font_color)
 			x += 48
 		}
 
-		draw_text(ray.TextFormat("%x", b), x, y, memory_font_size, memory_value_font_color)
+		draw_text(ray.TextFormat("%x", main_cpu.mem[b]), x, y, memory_font_size, memory_value_font_color)
 		x += 46
 
 		i += 1
@@ -824,6 +828,7 @@ main :: proc() {
 	push_label("LOOP", 1)
 
 	config.editor_font = ray.GetFontDefault()
+	ray.SetConfigFlags({.WINDOW_RESIZABLE})
     ray.InitWindow(config.window_width, config.window_height, "PISC Experience");
 
     ray.SetTargetFPS(60);
@@ -835,6 +840,11 @@ main :: proc() {
 
     for !ray.WindowShouldClose() {
         ray.BeginDrawing()
+
+        if ray.IsWindowResized() {
+        	config.window_width  = ray.GetScreenWidth()
+        	config.window_height = ray.GetScreenHeight()
+        }
 
         ray.ClearBackground(config.background_color)
 
