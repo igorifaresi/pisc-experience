@@ -569,7 +569,7 @@ process_editor_input :: proc() {
 			}
 
 			if !found_label {
-				cursor.ins -= 1
+				if cursor.ins > 0 do cursor.ins -= 1
 			} else {
 				cursor.in_label = true
 				fmt.println(cursor)
@@ -636,7 +636,37 @@ process_editor_input :: proc() {
 		update_char_cursor()		
 	}
 
-	if ray.IsKeyPressed(.UP) && cursor.ins > 0 do move_up()
+	add_line :: proc() {
+		clean_buffer: Static_List(byte, 16)
+
+		idx: u32 
+		if !cursor.in_label {
+			idx = u32(cursor.ins + 1)
+		} else {
+			idx = u32(main_cpu.labels.data[cursor.label].line)
+		}
+		idx *= 4
+
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+
+		labels := sl_slice(&main_cpu.labels)
+		for i := 0; i < len(labels); i += 1 {
+			label := &labels[i]
+
+			if label.line > u16(cursor.ins) {
+				label.line += 1
+			}
+		}
+		
+		move_down()
+
+		cursor.param = 0		
+	}
+
+	if ray.IsKeyPressed(.UP)  do move_up()
 		
 	if ray.IsKeyPressed(.DOWN) do move_down()
 
@@ -697,26 +727,7 @@ process_editor_input :: proc() {
 		}
 	}
 
-	if ray.IsKeyPressed(.ENTER) {
-		clean_buffer: Static_List(byte, 16)
-
-		idx: u32 
-		if !cursor.in_label {
-			idx = u32(cursor.ins + 1)
-		} else {
-			idx = u32(main_cpu.labels.data[cursor.label].line)
-		}
-		idx *= 4
-
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-		
-		move_down()
-
-		cursor.param = 0
-	}
+	if ray.IsKeyPressed(.ENTER) do add_line()
 		
 	if ray.IsKeyPressed(.DELETE) {
 		if !cursor.in_label {
@@ -726,8 +737,19 @@ process_editor_input :: proc() {
 			sl_remove(&main_cpu.editing_buffers, idx)
 			sl_remove(&main_cpu.editing_buffers, idx)
 
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				label := &labels[i]
+
+				if label.line > u16(cursor.ins) {
+					label.line -= 1
+				}
+			}
+
 			if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
 		} else {
+			cursor.ins      = u32(main_cpu.labels.data[cursor.label].line)
+			cursor.in_label = false
 			sl_remove(&main_cpu.labels, u32(cursor.label))
 		}
 	}
@@ -739,17 +761,28 @@ process_editor_input :: proc() {
 		char_buffer = &main_cpu.labels.data[cursor.label].name
 	}
 
-	if ray.IsKeyPressed(.BACKSPACE) && cursor.char > 0 {
-		sl_remove(char_buffer, cursor.char - 1)
-		cursor.char -= 1
+	if ray.IsKeyPressed(.BACKSPACE) {
+		if cursor.char > 0 {
+			sl_remove(char_buffer, cursor.char - 1)
+			cursor.char -= 1
+		} else if cursor.param > 0 {
+			cursor.param -= 1
+			update_char_cursor()
+		}
 	}
 
 	key := ray.GetCharPressed()
 
 	for key > 0 {
 	    if key >= 32 && key <= 125 && char_buffer.len < 16 {
-	    	sl_insert(char_buffer, byte(key), cursor.char)
-	    	cursor.char += 1
+	    	if !(key == ' ' && cursor.param < 3) {
+	    		sl_insert(char_buffer, byte(key), cursor.char)
+	    		cursor.char += 1
+			} else {
+				cursor.param += 1
+				update_char_cursor()
+			}
+	    	
 	    }
 
 	    key = ray.GetCharPressed()
