@@ -820,14 +820,14 @@ main :: proc() {
 		main_cpu.gpu.buffer[i] = u16(i)
 	}
 
-	set_buffer(0, 0, "nopis")
-	set_buffer(1, 0, "adding")
-	set_buffer(1, 1, "r0")
-	set_buffer(1, 2, "100")
+	if !load_cpu_from_file(&main_cpu, "save.pisc") {
+		set_buffer(0, 0, "nopis")
+		set_buffer(1, 0, "adding")
+		set_buffer(1, 1, "r0")
+		set_buffer(1, 2, "100")
 
-	push_label("LOOP", 1)
-
-	load_cpu_from_file(&main_cpu, "save.pisc")
+		push_label("LOOP", 1)
+	}
 
 	config.editor_font = ray.GetFontDefault()
 	ray.SetConfigFlags({.WINDOW_RESIZABLE})

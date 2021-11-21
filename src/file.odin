@@ -29,7 +29,7 @@ fmt.println("load")
 	{
 		i   := 0
 		dst := ([^]byte)(&cpu.editing_buffers)
-		for ; p < size_of(cpu.editing_buffers); p += 1 {
+		for ; i < size_of(cpu.editing_buffers); p += 1 {
 			dst[i] = src[p]
 			i += 1
 		}
@@ -38,7 +38,7 @@ fmt.println("load")
 	{
 		i   := 0
 		dst := ([^]byte)(&cpu.labels)
-		for ; p < size_of(cpu.labels); p += 1 {
+		for ; i < size_of(cpu.labels); p += 1 {
 			dst[i] = src[p]
 			i += 1
 		}
