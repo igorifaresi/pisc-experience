@@ -827,6 +827,8 @@ main :: proc() {
 
 	push_label("LOOP", 1)
 
+	load_cpu_from_file(&main_cpu, "save.pisc")
+
 	config.editor_font = ray.GetFontDefault()
 	ray.SetConfigFlags({.WINDOW_RESIZABLE})
     ray.InitWindow(config.window_width, config.window_height, "PISC Experience");
@@ -883,6 +885,8 @@ main :: proc() {
 
         ray.EndDrawing()
     }
+
+    dump_cpu_to_file(&main_cpu, "save.pisc")
 
     ray.CloseWindow()
 }
