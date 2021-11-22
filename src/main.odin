@@ -25,6 +25,7 @@ Config :: struct {
 	memory_font_size:             i32, 
 	memory_label_font_color:      ray.Color,
 	memory_value_font_color:      ray.Color,
+	gamepad_input_table:          Input_Table,
 }
 
 Cursor :: struct {
@@ -509,32 +510,7 @@ draw_editor :: proc() {
 }
 
 set_gamepad_flags :: proc() {
-	v: u16
-
-	if ray.IsKeyDown(.UP)    do v |= u16(Gamepad_Entries.Up)
-	if ray.IsKeyDown(.DOWN)  do v |= u16(Gamepad_Entries.Down)
-	if ray.IsKeyDown(.LEFT)  do v |= u16(Gamepad_Entries.Left)
-	if ray.IsKeyDown(.RIGHT) do v |= u16(Gamepad_Entries.Right)
-
-	if ray.IsKeyDown(.A) do v |= u16(Gamepad_Entries.A)
-	if ray.IsKeyDown(.B) do v |= u16(Gamepad_Entries.B)
-	if ray.IsKeyDown(.Z) do v |= u16(Gamepad_Entries.X)
-	if ray.IsKeyDown(.X) do v |= u16(Gamepad_Entries.Y)
-
-	if ray.IsKeyDown(.D)           do v |= u16(Gamepad_Entries.L)
-	if ray.IsKeyDown(.C)           do v |= u16(Gamepad_Entries.R)
-	if ray.IsKeyDown(.ENTER)       do v |= u16(Gamepad_Entries.Start)
-	if ray.IsKeyDown(.RIGHT_SHIFT) do v |= u16(Gamepad_Entries.Select)
-
-	if ray.IsMouseButtonDown(.LEFT)  do v |= u16(Gamepad_Entries.MouseLeft)
-	if ray.IsMouseButtonDown(.RIGHT) do v |= u16(Gamepad_Entries.MouseRight)
-
-	wheel := ray.GetMouseWheelMove()
-	if wheel > 0 {
-		v |= u16(Gamepad_Entries.MouseWheelUp)
-	} else if wheel < 0 {
-		v |= u16(Gamepad_Entries.MouseWheelDown)
-	}
+	v := check_input_table(&config.gamepad_input_table) 
 
 	main_cpu.reg_table[int(Register_Type.gp)] = i16(v)
 }
@@ -815,6 +791,26 @@ main :: proc() {
 	sl_push(&main_cpu.instructions, Instruction{ type=.Jmp, imediate=true , p2=3000 })
 	sl_push(&main_cpu.instructions, Instruction{ type=.Jmp, imediate=false, p0=u8(Register_Type.r0) })
 	sl_push(&main_cpu.instructions, Instruction{ type=.Load })*/
+
+	config.gamepad_input_table.up[0].type   = .Keyboard_Key
+	config.gamepad_input_table.up[0].kb_key = Keyboard_Key_Entry{ key=.UP }
+	config.gamepad_input_table.up[1].type   = .Gamepad_Axis
+	config.gamepad_input_table.up[1].gp_axis = Gamepad_Axis_Entry{ axis_number=1, positive=false }
+
+	config.gamepad_input_table.down[0].type   = .Keyboard_Key
+	config.gamepad_input_table.down[0].kb_key = Keyboard_Key_Entry{ key=.DOWN }
+	config.gamepad_input_table.down[1].type   = .Gamepad_Axis
+	config.gamepad_input_table.down[1].gp_axis = Gamepad_Axis_Entry{ axis_number=1, positive=true }
+
+	config.gamepad_input_table.left[0].type   = .Keyboard_Key
+	config.gamepad_input_table.left[0].kb_key = Keyboard_Key_Entry{ key=.LEFT }
+	config.gamepad_input_table.left[1].type   = .Gamepad_Axis
+	config.gamepad_input_table.left[1].gp_axis = Gamepad_Axis_Entry{ axis_number=0, positive=false }
+
+	config.gamepad_input_table.right[0].type   = .Keyboard_Key
+	config.gamepad_input_table.right[0].kb_key = Keyboard_Key_Entry{ key=.RIGHT }
+	config.gamepad_input_table.right[1].type   = .Gamepad_Axis
+	config.gamepad_input_table.right[1].gp_axis = Gamepad_Axis_Entry{ axis_number=0, positive=true }
 
 	for i := 0; i < GPU_BUFFER_H * GPU_BUFFER_W; i += 1 {
 		main_cpu.gpu.buffer[i] = u16(i)
