@@ -336,6 +336,8 @@ draw_status :: proc(err_qnt: i32) {
 	i: i32 = 0
 	draw_text(ray.TextFormat("STATUS: RUNNING, ERRORS: %d", err_qnt),
 		x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	draw_text(ray.TextFormat("FPS: %d", ray.GetFPS()),
+		x + 250, y + 8, memory_font_size, ray.LIGHTGRAY)
 }
 
 draw_memory :: proc() {
@@ -437,7 +439,7 @@ draw_editor :: proc() {
 	}
 
 	draw_err_indication :: proc(x: i32, y: i32, cstr: cstring) {
-		word_size := ray.MeasureText(cstr, config.editor_font_size)
+		word_size := i32(ray.MeasureTextEx(config.editor_font, cstr, f32(config.editor_font_size), 1.0).x)
 		tmp_y := y + config.editor_font_size
 		ray.DrawLine(x, tmp_y, x + word_size, tmp_y, config.editor_error_highlight_color)
 	}
@@ -446,9 +448,48 @@ draw_editor :: proc() {
 		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
+	get_cursor_y_offset :: proc() -> (y: i32) {
+		i_ins: u32 = 0
+
+		buffers := sl_slice(&main_cpu.editing_buffers)
+		for line := 0; line < len(buffers); line += 4 {
+
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				label := &labels[i]
+
+				if label.line == u16(i_ins) {
+					y += editor_label_y_offset
+
+					if cursor.in_label && cursor.label == u32(i) do return
+
+					y += editor_line_height
+				}
+			}
+
+			if !cursor.in_label && cursor.ins == i_ins do return
+
+			y     += editor_line_height
+			i_ins += 1
+		}
+
+		return
+	}
+
 	i_ins: u32 = 0
 	x: i32 = editor_left_padding
 	y: i32 = 0
+
+	cursor_y := get_cursor_y_offset()
+	
+	if cursor_y > (window_height - editor_line_height * 2) {
+		y -= cursor_y - (window_height - editor_line_height * 2)  
+	}
+
+	if cursor_y < (editor_line_height * 2) {
+		y += (editor_line_height * 2) - cursor_y
+	}
+
 	line_number_x: i32 = editor_left_padding / 2 //TODO: gambiarra
 
 	highlight_line_width := window_width - 730 - 8
@@ -871,12 +912,27 @@ main :: proc() {
         		execution_status = .Editing
         	}
 
+        	if ray.IsKeyPressed(.F4) {
+        		cpu_reset(&main_cpu)
+        		execution_status = .Running
+        	}
+
         } else if execution_status == .Editing {
 
         	if ray.IsKeyPressed(.F3) {
-        		main_cpu.pc = 0
+        		cpu_reset(&main_cpu)
         		execution_status = .Waiting
         	}
+
+        	if ray.IsKeyPressed(.F4) {
+        		cpu_reset(&main_cpu)
+        		execution_status = .Running
+        	}
+        } else if execution_status == .Running {
+        	for i := 0; !cpu_clock(&main_cpu); i += 1 {}
+
+			if ray.IsKeyPressed(.F3) do execution_status = .Waiting
+			if ray.IsKeyPressed(.E)  do execution_status = .Editing
         }
 
         ray.EndDrawing()

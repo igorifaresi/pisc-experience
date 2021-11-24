@@ -1,5 +1,7 @@
 package pisc
 
+import "core:fmt"
+
 Gamepad_Entries :: enum u16 {
 	Up             = 1,
 	Down           = 1 << 1,
@@ -164,12 +166,26 @@ CPU :: struct {
 	gpu: GPU,
 }
 
-cpu_clock :: proc(using cpu: ^CPU) {
-	if u32(cpu.pc) >= cpu.instructions.len do return
+cpu_reset :: proc(using cpu: ^CPU) {
+	pc = 0
 
-	inst := cpu.instructions.data[cpu.pc]
+	for i := 0; i < len(reg_table); i += 1 {
+		reg_table = 0
+	}
 
-	cpu.pc += 1
+	for i := 0; i < len(mem); i += 1 {
+		mem = 0
+	}
+
+	sl_clear(&call_stack)
+}
+
+cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
+	if u32(pc) >= instructions.len do return
+
+	inst := instructions.data[pc]
+
+	pc += 1
 
 	b := inst.imediate ? inst.p2 : reg_table[inst.p1]
 
@@ -218,7 +234,9 @@ cpu_clock :: proc(using cpu: ^CPU) {
 		cmp_flag = reg_table[inst.p0] == b
 
 	case .Vpoke:
-		addr  := reg_table[int(Register_Type.x)] + reg_table[int(Register_Type.y)] * GPU_BUFFER_W
+		x := int(reg_table[int(Register_Type.x)])
+		y := int(reg_table[int(Register_Type.y)])	
+		addr  := x + y * GPU_BUFFER_W
 		value := transmute(u16)(reg_table[inst.p0])
 		gpu.buffer[addr] = value
 
@@ -238,8 +256,11 @@ cpu_clock :: proc(using cpu: ^CPU) {
 		pc = sl_pop(&call_stack)
 
 	case .Vswap:
-
+		stop = true
+		return
 	case .Nop:
 	} // end switch
+
+	return
 }
 
