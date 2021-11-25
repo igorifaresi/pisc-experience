@@ -178,11 +178,16 @@ cpu_reset :: proc(using cpu: ^CPU) {
 	}
 
 	sl_clear(&call_stack)
+
+	for i := 0; i < GPU_BUFFER_H * GPU_BUFFER_W; i += 1 {
+		main_cpu.gpu.buffer[i] = 0
+	}
 }
 
 cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
 	if u32(pc) >= instructions.len do return
 
+//fmt.println("pc = ", pc)
 	inst := instructions.data[pc]
 
 	pc += 1
@@ -235,10 +240,12 @@ cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
 
 	case .Vpoke:
 		x := int(reg_table[int(Register_Type.x)])
-		y := int(reg_table[int(Register_Type.y)])	
+		y := int(reg_table[int(Register_Type.y)])
+//	fmt.println("x = ", x)
+//	fmt.println("y = ", y)	
 		addr  := x + y * GPU_BUFFER_W
 		value := transmute(u16)(reg_table[inst.p0])
-		gpu.buffer[addr] = value
+		if addr >= 0 && addr < len(gpu.buffer) do gpu.buffer[addr] = value
 
 	case .Vpeek:
 		addr := reg_table[inst.p1] + inst.p2

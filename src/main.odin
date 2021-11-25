@@ -72,6 +72,9 @@ buffer_status: [MAX_INSTRUCTIONS*4]BufferStatus
 has_errs         := false
 err_qnt          := 0
 execution_status := ExecutionStatus.Editing
+editor_y_offset: i32
+first_line_y_offset: i32 = 0
+setted_first_line_y_offset := false
 
 compile :: proc() -> (success := true, err_qnt: int) {
 	sl_clear(&main_cpu.instructions)
@@ -212,7 +215,8 @@ compile_line :: proc(line: u32) -> (ins: Instruction, success := true) {
 
 		reg2_type, ok = registers_table[buff]
 		if ok {
-			ins.p0 = u8(reg2_type)
+			ins.p1 = u8(reg2_type)
+			ins.imediate = false
 		} else {
 			imediate, ok := strconv.parse_i64(string(buff))
 			if ok {
@@ -423,7 +427,21 @@ draw_editor :: proc() {
 		return strings.clone_to_cstring(string(sl_slice(char_buffer)))
 	}
 
-	draw_cursor :: proc(x: i32, y: i32, i_ins: u32, i_param: u32) {
+	lerp_cursor :: proc(y: i32) {
+		if y > config.window_height - 64 {
+			offset := y - (config.window_height - 64)
+			editor_y_offset -= offset / 2
+		}
+
+		if y < 64 {
+			offset := 64 - y
+			editor_y_offset += offset / 2
+		}
+	} 
+
+	draw_cursor :: proc(x, y: i32, i_ins: u32, i_param: u32) {
+		lerp_cursor(y)
+
 		cstr          := lookup_buffer(i_ins, i_param)
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
 		cursor_offset := i32(ray.MeasureTextEx(config.editor_font, first_half, f32(config.editor_font_size), 1.0).x)
@@ -431,7 +449,9 @@ draw_editor :: proc() {
 		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
 	}
 
-	draw_cursor_label :: proc(x: i32, y: i32, cstr: cstring) {
+	draw_cursor_label :: proc(x, y: i32, cstr: cstring) {
+		lerp_cursor(y)
+
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
 		cursor_offset := i32(ray.MeasureTextEx(config.editor_font, first_half, f32(config.editor_font_size), 1.0).x)
 		cursor_x      := x + cursor_offset
@@ -444,11 +464,9 @@ draw_editor :: proc() {
 		ray.DrawLine(x, tmp_y, x + word_size, tmp_y, config.editor_error_highlight_color)
 	}
 
-	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
-	}
+	get_total_editor_height :: proc() -> (y: i32) {
+		using config
 
-	get_cursor_y_offset :: proc() -> (y: i32) {
 		i_ins: u32 = 0
 
 		buffers := sl_slice(&main_cpu.editing_buffers)
@@ -460,14 +478,9 @@ draw_editor :: proc() {
 
 				if label.line == u16(i_ins) {
 					y += editor_label_y_offset
-
-					if cursor.in_label && cursor.label == u32(i) do return
-
 					y += editor_line_height
 				}
 			}
-
-			if !cursor.in_label && cursor.ins == i_ins do return
 
 			y     += editor_line_height
 			i_ins += 1
@@ -476,19 +489,13 @@ draw_editor :: proc() {
 		return
 	}
 
+	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
 	i_ins: u32 = 0
 	x: i32 = editor_left_padding
-	y: i32 = 0
-
-	cursor_y := get_cursor_y_offset()
-	
-	if cursor_y > (window_height - editor_line_height * 2) {
-		y -= cursor_y - (window_height - editor_line_height * 2)  
-	}
-
-	if cursor_y < (editor_line_height * 2) {
-		y += (editor_line_height * 2) - cursor_y
-	}
+	y: i32 = editor_y_offset
 
 	line_number_x: i32 = editor_left_padding / 2 //TODO: gambiarra
 
@@ -613,6 +620,13 @@ process_editor_input :: proc() {
 			}
 		}
 		update_char_cursor()
+/*
+		cursor_y := get_cursor_y_offset()
+	fmt.println("cursor_y = ", cursor_y)
+	
+		if cursor_y < (config.editor_line_height * 2) {
+			editor_y_offset = (config.editor_line_height * 2) - cursor_y
+		}*/
 	}
 
 	move_down :: proc() {
@@ -654,7 +668,14 @@ process_editor_input :: proc() {
 				cursor.in_label = false
 			}
 		}
-		update_char_cursor()		
+		update_char_cursor()	
+/*
+		cursor_y := get_cursor_y_offset()
+	fmt.println("cursor_y = ", cursor_y)
+	
+		if cursor_y > (config.window_height - config.editor_line_height * 2) {
+			editor_y_offset = -(cursor_y - (config.window_height - config.editor_line_height * 2)) 
+		}*/
 	}
 
 	add_line :: proc() {
@@ -853,10 +874,6 @@ main :: proc() {
 	config.gamepad_input_table.right[1].type   = .Gamepad_Axis
 	config.gamepad_input_table.right[1].gp_axis = Gamepad_Axis_Entry{ axis_number=0, positive=true }
 
-	for i := 0; i < GPU_BUFFER_H * GPU_BUFFER_W; i += 1 {
-		main_cpu.gpu.buffer[i] = u16(i)
-	}
-
 	if !load_cpu_from_file(&main_cpu, "save.pisc") {
 		set_buffer(0, 0, "nopis")
 		set_buffer(1, 0, "adding")
@@ -904,7 +921,7 @@ main :: proc() {
 
         if execution_status == .Waiting {
         	
-        	if ray.IsKeyPressed(.F7) {
+        	if ray.IsKeyPressed(.DOWN) {
         		cpu_clock(&main_cpu)
         	}
         	
@@ -928,6 +945,13 @@ main :: proc() {
         		cpu_reset(&main_cpu)
         		execution_status = .Running
         	}
+
+        	if ray.IsKeyPressed(.F6) {
+        		cpu_reset(&main_cpu)
+        		main_cpu.pc = u16(cursor.ins)
+        		execution_status = .Waiting
+        	}
+
         } else if execution_status == .Running {
         	for i := 0; !cpu_clock(&main_cpu); i += 1 {}
 
