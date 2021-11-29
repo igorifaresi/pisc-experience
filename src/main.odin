@@ -3,6 +3,7 @@ package pisc
 import "core:fmt"
 import "core:strconv"
 import "core:strings"
+import "sfd"
 import ray "vendor:raylib"
 
 Config :: struct {
@@ -401,13 +402,24 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 	}
 
 	
-	if ray.IsKeyPressed(.A) {
+	/*if ray.IsKeyPressed(.A) {
 		for i := 0; i < 7; i += 1 {
 			btn_position[i] = init_x
 			btn_alpha[i] = 0
 		}
-	}
+	}*/
 	
+
+	/*if ray.IsKeyPressed(.A) {
+		opt := sfd.Options{
+			title="Open File",
+			path=".",
+			filter_name="PISC file",
+			filter="*",
+			extension="",
+		}
+		fmt.println(sfd.open_dialog(&opt))
+	}*/
 
 	btn_state: [7]Button_Actual_State
 
@@ -436,8 +448,6 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		}
 
 		x := btn_position[i]
-		//x := btn_position[i] > target_x ? target_x : btn_position[i]
-		//x := target_x
 
 		btn_alpha[i] += (255 - btn_alpha[i]) / 8
 
