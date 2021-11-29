@@ -6,26 +6,29 @@ import "core:strings"
 import ray "vendor:raylib"
 
 Config :: struct {
-	window_width:                 i32,
-	window_height:                i32,
-	background_color:             ray.Color,
-	editor_font_size:             i32,
-	editor_line_height:           i32,
-	editor_top_padding:           i32,
-	editor_left_padding:          i32,
-	editor_mnemonic_left_margin:  i32,
-	editor_param_left_margin:     i32,
-	editor_font:                  ray.Font,
-	editor_label_y_offset:        i32,
-	editor_label_x_offset:        i32,
-	editor_line_highlight_color:  ray.Color,
-	editor_error_highlight_color: ray.Color,
-	editor_font_color:            ray.Color,
-	memory_font:                  ray.Font,
-	memory_font_size:             i32, 
-	memory_label_font_color:      ray.Color,
-	memory_value_font_color:      ray.Color,
-	gamepad_input_table:          Input_Table,
+	window_width:                    i32,
+	window_height:                   i32,
+	background_color:                ray.Color,
+	top_bar_height:                  i32,
+	top_bar_shortcut_hint_font:      ray.Font,
+	top_bar_shortcut_hint_font_size: i32,
+	editor_font_size:                i32,
+	editor_line_height:              i32,
+	editor_top_padding:              i32,
+	editor_left_padding:             i32,
+	editor_mnemonic_left_margin:     i32,
+	editor_param_left_margin:        i32,
+	editor_font:                     ray.Font,
+	editor_label_y_offset:           i32,
+	editor_label_x_offset:           i32,
+	editor_line_highlight_color:     ray.Color,
+	editor_error_highlight_color:    ray.Color,
+	editor_font_color:               ray.Color,
+	memory_font:                     ray.Font,
+	memory_font_size:                i32, 
+	memory_label_font_color:         ray.Color,
+	memory_value_font_color:         ray.Color,
+	gamepad_input_table:             Input_Table,
 }
 
 Cursor :: struct {
@@ -52,6 +55,8 @@ config := Config{
 	window_width=1200,
 	window_height=600,
 	background_color=ray.Color{30, 31, 25, 255},
+	top_bar_height=32,
+	top_bar_shortcut_hint_font_size=12,
 	editor_font_size=20,
 	editor_line_height=20,
 	editor_top_padding=64,
@@ -73,8 +78,6 @@ has_errs         := false
 err_qnt          := 0
 execution_status := ExecutionStatus.Editing
 editor_y_offset: i32
-first_line_y_offset: i32 = 0
-setted_first_line_y_offset := false
 
 compile :: proc() -> (success := true, err_qnt: int) {
 	sl_clear(&main_cpu.instructions)
@@ -323,7 +326,7 @@ draw_video_buffer :: proc() {
 	for y : i32 = 0; y < GPU_BUFFER_H; y += 1 {
 		for x : i32 = 0; x < GPU_BUFFER_W; x += 1 {
 			pisc_color := main_cpu.gpu.buffer[y*GPU_BUFFER_W + x]
-			ray.DrawPixel(window_width  - 730 + x, y + 32, pisc_color_to_rbg(pisc_color));
+			ray.DrawPixel(window_width  - 730 + x, y + 32 + top_bar_height, pisc_color_to_rbg(pisc_color));
 		}
 	}
 }
@@ -336,12 +339,133 @@ draw_status :: proc(err_qnt: i32) {
 	}
 
 	x: i32 = window_width  - 730
-	y: i32 = 0
+	y: i32 = top_bar_height
 	i: i32 = 0
 	draw_text(ray.TextFormat("STATUS: RUNNING, ERRORS: %d", err_qnt),
 		x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	draw_text(ray.TextFormat("FPS: %d", ray.GetFPS()),
 		x + 250, y + 8, memory_font_size, ray.LIGHTGRAY)
+}
+
+//btn_position: [7]i32 = {730, 730, 730, 730, 730, 730, 730}
+btn_position: [7]i32
+btn_alpha: [7]u32
+
+draw_top_bar_and_handle_shortcuts :: proc() {
+	using config
+
+	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+	
+	draw_text_shortcut_hint :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.top_bar_shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
+	c := editor_line_highlight_color
+
+	mouse_x := ray.GetMouseX()
+	mouse_y := ray.GetMouseY()
+
+	init_x : i32 = window_width - 730
+	end_x  : i32 = window_width
+	init_y : i32 = 0
+	end_y  : i32 = top_bar_height
+
+	button_width := (end_x - init_x) / 7 + 1
+
+	Button_Actual_State :: enum {
+		None = 0,
+		Hover,
+		Clicked,
+	}
+
+	btn_text: [7]cstring = {
+		"New",
+		"Open",
+		"Save",
+		"Save as",
+		"Debug",
+		"Debug here",
+		"Run",
+	}
+
+	btn_shortcut_text: [7]cstring = {
+		"ctrl+N",
+		"ctrl+O",
+		"ctrl+S",
+		"ctrl+shift+S",
+		"F3",
+		"F6",
+		"F4",
+	}
+
+	
+	if ray.IsKeyPressed(.A) {
+		for i := 0; i < 7; i += 1 {
+			btn_position[i] = init_x
+			btn_alpha[i] = 0
+		}
+	}
+	
+
+	btn_state: [7]Button_Actual_State
+
+	if mouse_x >= init_x && mouse_x < end_x && mouse_y >= init_y && mouse_y <= end_y {
+		relative_mouse_x := mouse_x - init_x
+
+		for i : i32 = 0; i < 7; i += 1 {
+			if (relative_mouse_x / button_width) == i {
+				if ray.IsMouseButtonDown(.LEFT) {
+					btn_state[i] = .Clicked
+				} else {
+					btn_state[i] = .Hover
+				}
+			}
+		} 
+	}
+
+	for i : i32 = 0; i < 7; i += 1 {
+		target_x := init_x + button_width * i
+
+		dist := target_x - btn_position[i]
+		if dist <= 3 && dist > 0 {
+			btn_position[i] += 1
+		} else {
+			btn_position[i] += dist / 3
+		}
+
+		x := btn_position[i]
+		//x := btn_position[i] > target_x ? target_x : btn_position[i]
+		//x := target_x
+
+		btn_alpha[i] += (255 - btn_alpha[i]) / 8
+
+		switch btn_state[i] {
+		case .None:
+			//ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.LIGHTGRAY)
+			c := ray.LIGHTGRAY
+			c.a = 48
+			if (x + button_width) > window_width {
+				ray.DrawRectangleLines(x + 1, 1, (window_width - x) - 2, top_bar_height - 2, c)
+			} else {
+				ray.DrawRectangleLines(x + 1, 1, button_width - 2, top_bar_height - 2, c)				
+			}
+		case .Hover:
+			ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.YELLOW)
+		case .Clicked:
+			ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.RED)
+		}
+
+		text_color          := ray.LIGHTGRAY
+		shortcut_hint_color := ray.LIGHTGRAY
+
+		text_color.a          = u8(btn_alpha[i])
+		shortcut_hint_color.a = u8(btn_alpha[i])
+
+		draw_text(btn_text[i], x + 4, 2, memory_font_size, text_color)
+		draw_text_shortcut_hint(btn_shortcut_text[i], x + 4, 2 + memory_font_size, top_bar_shortcut_hint_font_size, shortcut_hint_color)
+	}
 }
 
 draw_memory :: proc() {
@@ -375,7 +499,7 @@ draw_memory :: proc() {
 	draw_text(ray.TextFormat("%d", main_cpu.pc), x + 32, y, memory_font_size, memory_value_font_color)
 
 	x = window_width - 80*3
-	y = 0
+	y = top_bar_height
 	i = 0
 	draw_text("RAM", x, y + 8, memory_font_size, ray.LIGHTGRAY)
 
@@ -398,7 +522,7 @@ draw_memory :: proc() {
 	}
 
 	x =  window_width  - 730
-	y = GPU_BUFFER_H + 32
+	y = GPU_BUFFER_H + 32 + top_bar_height
 	i = 0
 	draw_text("CALL STACK", x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	call_stack := sl_slice(&main_cpu.call_stack)
@@ -893,6 +1017,8 @@ main :: proc() {
 
     config.editor_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.editor_font_size, nil, 0) 
     config.memory_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.memory_font_size, nil, 0)
+    config.top_bar_shortcut_hint_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.top_bar_shortcut_hint_font_size, nil, 0)
+
 
     for !ray.WindowShouldClose() {
         ray.BeginDrawing()
@@ -913,6 +1039,7 @@ main :: proc() {
         }
 
         draw_editor()
+        draw_top_bar_and_handle_shortcuts()
         draw_memory()
         draw_status(i32(err_qnt))
         draw_video_buffer()
