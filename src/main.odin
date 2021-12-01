@@ -80,6 +80,9 @@ err_qnt          := 0
 execution_status := ExecutionStatus.Editing
 editor_y_offset: i32
 
+have_editing_path := false
+editing_path: cstring
+
 compile :: proc() -> (success := true, err_qnt: int) {
 	sl_clear(&main_cpu.instructions)
 
@@ -349,8 +352,17 @@ draw_status :: proc(err_qnt: i32) {
 }
 
 //btn_position: [7]i32 = {730, 730, 730, 730, 730, 730, 730}
+Button_Actual_State :: enum {
+	None = 0,
+	Hover,
+	Clicked,
+}
+
 btn_position: [7]i32
-btn_alpha: [7]u32
+btn_alpha:    [7]u32
+btn_state:    [7]Button_Actual_State
+
+top_bar_btn_qnt: i32 = 7
 
 draw_top_bar_and_handle_shortcuts :: proc() {
 	using config
@@ -363,6 +375,13 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		ray.DrawTextEx(config.top_bar_shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
+	reset_top_bar :: proc(init_x: i32) {
+		for i := 0; i < 7; i += 1 {
+			btn_position[i] = init_x
+			btn_alpha[i] = 0
+		}
+	}
+
 	c := editor_line_highlight_color
 
 	mouse_x := ray.GetMouseX()
@@ -373,71 +392,165 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 	init_y : i32 = 0
 	end_y  : i32 = top_bar_height
 
-	button_width := (end_x - init_x) / 7 + 1
+	button_width := (end_x - init_x) / top_bar_btn_qnt + 1
 
-	Button_Actual_State :: enum {
-		None = 0,
-		Hover,
-		Clicked,
-	}
+	NEW_BTN     :: 0
+	OPEN_BTN    :: 1
+	SAVE_BTN    :: 2
+	SAVE_AS_BTN :: 3
 
-	btn_text: [7]cstring = {
-		"New",
-		"Open",
-		"Save",
-		"Save as",
-		"Debug",
-		"Debug here",
-		"Run",
-	}
+	editing_top_bar_text: [7]cstring = {"New", "Open", "Save", "Save as", "Debug", "Debug here", "Run"}
+	editing_top_bar_shortcut_text: [7]cstring = {"ctrl+N", "ctrl+O", "ctrl+S", "ctrl+shift+S", "F3", "F6", "F4"}
 
-	btn_shortcut_text: [7]cstring = {
-		"ctrl+N",
-		"ctrl+O",
-		"ctrl+S",
-		"ctrl+shift+S",
-		"F3",
-		"F6",
-		"F4",
-	}
+	waiting_top_bar_text: [7]cstring = {"New", "Open", "Save", "Save as", "Edit", "Step", "Run"}
+	waiting_top_bar_shortcut_text: [7]cstring = {"ctrl+N", "ctrl+O", "ctrl+S", "ctrl+shift+S", "E", "F7", "F4"}
 
+	running_top_bar_text: [6]cstring = {"New", "Open", "Save", "Save as", "Edit", "Debug"}
+	running_top_bar_shortcut_text: [6]cstring = {"ctrl+N", "ctrl+O", "ctrl+S", "ctrl+shift+S", "E", "F3"}
+
+	btn_text:          []cstring
+	btn_shortcut_text: []cstring
+
+	switch execution_status {
+	case .Editing:
+
+		btn_text = editing_top_bar_text[:]
+		btn_shortcut_text = editing_top_bar_shortcut_text[:]
+		top_bar_btn_qnt = 7
 	
-	/*if ray.IsKeyPressed(.A) {
-		for i := 0; i < 7; i += 1 {
-			btn_position[i] = init_x
-			btn_alpha[i] = 0
-		}
-	}*/
-	
+	case .Waiting:
 
-	/*if ray.IsKeyPressed(.A) {
-		opt := sfd.Options{
-			title="Open File",
-			path=".",
-			filter_name="PISC file",
-			filter="*",
-			extension="",
-		}
-		fmt.println(sfd.open_dialog(&opt))
-	}*/
+		btn_text = waiting_top_bar_text[:]
+		btn_shortcut_text = waiting_top_bar_shortcut_text[:]
+		top_bar_btn_qnt = 7
 
-	btn_state: [7]Button_Actual_State
+	case .Running:
+
+		btn_text = running_top_bar_text[:]
+		btn_shortcut_text = running_top_bar_shortcut_text[:]
+		top_bar_btn_qnt = 6
+
+	} 
 
 	if mouse_x >= init_x && mouse_x < end_x && mouse_y >= init_y && mouse_y <= end_y {
 		relative_mouse_x := mouse_x - init_x
 
-		for i : i32 = 0; i < 7; i += 1 {
+		for i : i32 = 0; i < top_bar_btn_qnt; i += 1 {
 			if (relative_mouse_x / button_width) == i {
-				if ray.IsMouseButtonDown(.LEFT) {
+				if ray.IsMouseButtonPressed(.LEFT) {
 					btn_state[i] = .Clicked
 				} else {
 					btn_state[i] = .Hover
 				}
+			} else {
+				btn_state[i] = .None				
 			}
 		} 
+	} else {
+		for i : i32 = 0; i < top_bar_btn_qnt; i += 1 {
+			btn_state[i] = .None
+		}
 	}
 
-	for i : i32 = 0; i < 7; i += 1 {
+	{
+		if btn_state[NEW_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.N)) {
+
+		} else if btn_state[OPEN_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.O)) {
+			opt := sfd.Options{
+				title="Open File",
+				path=".",
+				filter_name="PISC file",
+				filter="*",
+				extension="",
+			}
+			load_cpu_from_file(&main_cpu, sfd.open_dialog(&opt))
+		} else if btn_state[SAVE_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.S)) {
+			if !have_editing_path {
+				opt := sfd.Options{
+					title="Save file as",
+					path=".",
+					filter_name="PISC file",
+					filter="*",
+					extension="",
+				}
+				editing_path = sfd.save_dialog(&opt)
+				have_editing_path = true
+
+				dump_cpu_to_file(&main_cpu, editing_path)
+			} else {
+				dump_cpu_to_file(&main_cpu, editing_path)
+			}
+		} else if btn_state[SAVE_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) &&
+		ray.IsKeyPressed(.LEFT_SHIFT) && ray.IsKeyPressed(.S)) {
+			opt := sfd.Options{
+				title="Save file as",
+				path=".",
+				filter_name="PISC file",
+				filter="*",
+				extension="",
+			}
+			editing_path = sfd.save_dialog(&opt)
+			have_editing_path = true
+
+			dump_cpu_to_file(&main_cpu, editing_path)
+		}
+
+		switch execution_status {
+		case .Waiting:
+        		
+        	if ray.IsKeyPressed(.E)  || btn_state[SAVE_AS_BTN + 1] == .Clicked {
+        		execution_status = .Editing
+        		reset_top_bar(init_x)
+        	}
+
+        	if ray.IsKeyPressed(.F7) || btn_state[SAVE_AS_BTN + 2] == .Clicked {
+        		cpu_clock(&main_cpu)
+        	}
+
+        	if ray.IsKeyPressed(.F4) || btn_state[SAVE_AS_BTN + 3] == .Clicked {
+        		cpu_reset(&main_cpu)
+        		execution_status = .Running
+        		reset_top_bar(init_x)
+        	}
+
+        case .Editing:
+
+        	if ray.IsKeyPressed(.F3) || btn_state[SAVE_AS_BTN + 1] == .Clicked {
+        		cpu_reset(&main_cpu)
+        		execution_status = .Waiting
+        		reset_top_bar(init_x)
+        	}
+
+        	if ray.IsKeyPressed(.F6) || btn_state[SAVE_AS_BTN + 2] == .Clicked {
+        		cpu_reset(&main_cpu)
+        		main_cpu.pc = u16(cursor.ins)
+        		execution_status = .Waiting
+        		reset_top_bar(init_x)
+        	}
+
+        	if ray.IsKeyPressed(.F4) || btn_state[SAVE_AS_BTN + 3] == .Clicked {
+        		cpu_reset(&main_cpu)
+        		execution_status = .Running
+        		reset_top_bar(init_x)
+        	}
+
+        case .Running:
+
+        	for i := 0; !cpu_clock(&main_cpu); i += 1 {}
+
+        	if ray.IsKeyPressed(.E)  || btn_state[SAVE_AS_BTN + 1] == .Clicked {
+        		execution_status = .Editing
+        		reset_top_bar(init_x)
+        	}
+
+			if ray.IsKeyPressed(.F3) || btn_state[SAVE_AS_BTN + 2] == .Clicked {
+				execution_status = .Waiting
+        		reset_top_bar(init_x)
+			}
+        } 
+	}
+
+	for i : i32 = 0; i < top_bar_btn_qnt; i += 1 {
 		target_x := init_x + button_width * i
 
 		dist := target_x - btn_position[i]
@@ -451,9 +564,15 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 
 		btn_alpha[i] += (255 - btn_alpha[i]) / 8
 
+		text_color          : ray.Color 
+		shortcut_hint_color : ray.Color 
+
 		switch btn_state[i] {
 		case .None:
-			//ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.LIGHTGRAY)
+
+			text_color          = ray.LIGHTGRAY
+			shortcut_hint_color = ray.LIGHTGRAY
+
 			c := ray.LIGHTGRAY
 			c.a = 48
 			if (x + button_width) > window_width {
@@ -462,13 +581,15 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 				ray.DrawRectangleLines(x + 1, 1, button_width - 2, top_bar_height - 2, c)				
 			}
 		case .Hover:
-			ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.YELLOW)
-		case .Clicked:
-			ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.RED)
-		}
+			
+			text_color          = ray.BLACK
+			shortcut_hint_color = ray.BLACK
 
-		text_color          := ray.LIGHTGRAY
-		shortcut_hint_color := ray.LIGHTGRAY
+			ray.DrawRectangle(x + 1, 1, button_width - 2, top_bar_height - 2, memory_label_font_color)
+
+		case .Clicked:
+			ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.WHITE)
+		}
 
 		text_color.a          = u8(btn_alpha[i])
 		shortcut_hint_color.a = u8(btn_alpha[i])
@@ -1055,46 +1176,6 @@ main :: proc() {
         draw_video_buffer()
 
         has_errs, err_qnt = compile()
-
-        if execution_status == .Waiting {
-        	
-        	if ray.IsKeyPressed(.DOWN) {
-        		cpu_clock(&main_cpu)
-        	}
-        	
-        	if ray.IsKeyPressed(.E) {
-        		execution_status = .Editing
-        	}
-
-        	if ray.IsKeyPressed(.F4) {
-        		cpu_reset(&main_cpu)
-        		execution_status = .Running
-        	}
-
-        } else if execution_status == .Editing {
-
-        	if ray.IsKeyPressed(.F3) {
-        		cpu_reset(&main_cpu)
-        		execution_status = .Waiting
-        	}
-
-        	if ray.IsKeyPressed(.F4) {
-        		cpu_reset(&main_cpu)
-        		execution_status = .Running
-        	}
-
-        	if ray.IsKeyPressed(.F6) {
-        		cpu_reset(&main_cpu)
-        		main_cpu.pc = u16(cursor.ins)
-        		execution_status = .Waiting
-        	}
-
-        } else if execution_status == .Running {
-        	for i := 0; !cpu_clock(&main_cpu); i += 1 {}
-
-			if ray.IsKeyPressed(.F3) do execution_status = .Waiting
-			if ray.IsKeyPressed(.E)  do execution_status = .Editing
-        }
 
         ray.EndDrawing()
     }

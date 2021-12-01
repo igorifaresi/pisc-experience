@@ -9,7 +9,7 @@ to_bytes :: proc(v: $T) -> [size_of(T)]byte {
     return transmute([size_of(T)]byte)v
 }
 
-load_cpu_from_file :: proc(cpu: ^CPU, file_name: string) -> (success: bool) {
+load_cpu_from_file :: proc(cpu: ^CPU, file_name: cstring) -> (success: bool) {
 fmt.println("load")
 	mem_append :: proc(src : $T, dst : []byte, p : ^int) {
 		src_in_bytes := to_bytes(src)
@@ -21,7 +21,7 @@ fmt.println("load")
 
 	src: []byte
 
-	src, success = os.read_entire_file(file_name)
+	src, success = os.read_entire_file(string(file_name))
 	if !success do return
 
 	p := 0
@@ -48,7 +48,7 @@ fmt.println("load")
 	return
 }
 
-dump_cpu_to_file :: proc(cpu: ^CPU, file_name: string) {
+dump_cpu_to_file :: proc(cpu: ^CPU, file_name: cstring) {
 fmt.println("dump")
 	mem_append :: proc(src : $T, dst : []byte, p : ^int) {
 		src_in_bytes := to_bytes(src)
@@ -67,5 +67,5 @@ fmt.println("dump")
 	mem_append(cpu.editing_buffers, output, &p)
 	mem_append(cpu.labels         , output, &p)
 
-	os.write_entire_file(file_name, output)
+	os.write_entire_file(string(file_name), output)
 }
