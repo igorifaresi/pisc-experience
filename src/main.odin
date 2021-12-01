@@ -780,6 +780,7 @@ draw_editor :: proc() {
 		}
 
 		if execution_status == .Waiting && u16(i_ins) == main_cpu.pc {
+			lerp_cursor(y)
 			ray.DrawRectangle(0, y, highlight_line_width, editor_font_size, editor_line_highlight_color)
 		}
 
