@@ -480,7 +480,7 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 			} else {
 				dump_cpu_to_file(&main_cpu, editing_path)
 			}
-		} else if btn_state[SAVE_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) &&
+		} else if btn_state[SAVE_AS_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) &&
 		ray.IsKeyPressed(.LEFT_SHIFT) && ray.IsKeyPressed(.S)) {
 			opt := sfd.Options{
 				title="Save file as",
