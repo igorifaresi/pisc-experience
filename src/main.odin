@@ -3,6 +3,7 @@ package pisc
 import "core:fmt"
 import "core:strconv"
 import "core:strings"
+import "core:math"
 import "sfd"
 import ray "vendor:raylib"
 
@@ -80,8 +81,13 @@ err_qnt          := 0
 execution_status := ExecutionStatus.Editing
 editor_y_offset: i32
 
+unsaved := false
 have_editing_path := false
 editing_path: cstring
+editing_file_name: string
+dialog_alpha : f64 = 0.0
+dialog_msg: cstring = "There is some errors in code."
+dialog_bad := true
 
 compile :: proc() -> (success := true, err_qnt: int) {
 	sl_clear(&main_cpu.instructions)
@@ -316,6 +322,54 @@ push_label :: proc(str: string, line: u16) {
 	sl_push(&main_cpu.labels, label)
 }
 
+open_dialog :: proc(text: cstring, bad: bool) {
+	dialog_msg   = text
+	dialog_alpha = 1.0
+	dialog_bad   = bad
+}
+
+draw_dialog_if_exists :: proc() {
+	using config
+
+	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
+	x : i32 = 12
+	width  : i32 = window_width - 12*2 - 730 
+	height : i32 = memory_font_size + 4*2
+	y : i32 = window_height - height - 12
+	
+	c := background_color
+	c.r += 8
+	c.g += 8
+	c.b += 8
+	c.a = u8(f64(c.a) * dialog_alpha)
+
+	ray.DrawRectangle(x, y, width, height, c)
+
+	c = ray.LIGHTGRAY
+	c.a = u8(f64(c.a) * dialog_alpha)
+	
+	ray.DrawRectangleLines(x, y, width, height, c)
+
+	if dialog_bad {
+		c = editor_error_highlight_color
+	} else {
+		c = editor_font_color
+	}
+
+	c.a = u8(f64(c.a) * dialog_alpha)
+	draw_text(dialog_msg, x + 12, y + 3, memory_font_size, c)
+
+	if dialog_bad {
+		dialog_alpha -= (1.00001 - dialog_alpha) / 32
+	} else {
+		dialog_alpha -= (1.00001 - dialog_alpha) / 8		
+	}
+	if dialog_alpha < 0 do dialog_alpha = 0
+}
+
 draw_video_buffer :: proc() {
 	using config
 
@@ -345,10 +399,34 @@ draw_status :: proc(err_qnt: i32) {
 	x: i32 = window_width  - 730
 	y: i32 = top_bar_height
 	i: i32 = 0
-	draw_text(ray.TextFormat("STATUS: RUNNING, ERRORS: %d", err_qnt),
+	/*draw_text(ray.TextFormat("STATUS: RUNNING, ERRORS: %d", err_qnt),
 		x, y + 8, memory_font_size, ray.LIGHTGRAY)
 	draw_text(ray.TextFormat("FPS: %d", ray.GetFPS()),
-		x + 250, y + 8, memory_font_size, ray.LIGHTGRAY)
+		x + 250, y + 8, memory_font_size, ray.LIGHTGRAY)*/
+
+	switch execution_status {
+	case .Running:
+		draw_text("RUNNING", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	case .Waiting:
+		draw_text("DEBUGGING", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	case .Editing:
+		draw_text(ray.TextFormat("EDITING(%d)errors", err_qnt), x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	}
+
+	{
+		cstr := strings.clone_to_cstring(editing_file_name)
+		if unsaved do cstr = ray.TextFormat("*%s", cstr)
+		file_name_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
+		new_x := (x + (x + GPU_BUFFER_W)) / 2 - file_name_size / 2
+		draw_text(cstr, new_x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	}
+
+	{
+		cstr := ray.TextFormat("FPS: %d", ray.GetFPS())
+		fps_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
+		new_x := (x + GPU_BUFFER_W) - fps_size
+		draw_text(cstr, new_x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	}
 }
 
 //btn_position: [7]i32 = {730, 730, 730, 730, 730, 730, 730}
@@ -463,7 +541,13 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 				filter="*",
 				extension="",
 			}
-			load_cpu_from_file(&main_cpu, sfd.open_dialog(&opt))
+
+			editing_path = sfd.open_dialog(&opt)
+			tmp := strings.split(string(editing_path), "/")
+			editing_file_name = tmp[len(tmp) - 1]
+			have_editing_path = true
+
+			load_cpu_from_file(&main_cpu, editing_path)
 		} else if btn_state[SAVE_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.S)) {
 			if !have_editing_path {
 				opt := sfd.Options{
@@ -474,12 +558,18 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 					extension="",
 				}
 				editing_path = sfd.save_dialog(&opt)
+				tmp := strings.split(string(editing_path), "/")
+				editing_file_name = tmp[len(tmp) - 1]
 				have_editing_path = true
 
 				dump_cpu_to_file(&main_cpu, editing_path)
 			} else {
 				dump_cpu_to_file(&main_cpu, editing_path)
 			}
+
+			unsaved = false
+			open_dialog("Saved.", false)
+
 		} else if btn_state[SAVE_AS_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) &&
 		ray.IsKeyPressed(.LEFT_SHIFT) && ray.IsKeyPressed(.S)) {
 			opt := sfd.Options{
@@ -490,9 +580,24 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 				extension="",
 			}
 			editing_path = sfd.save_dialog(&opt)
+			tmp := strings.split(string(editing_path), "/")
+			editing_file_name = tmp[len(tmp) - 1]
 			have_editing_path = true
 
 			dump_cpu_to_file(&main_cpu, editing_path)
+
+			unsaved = false
+			open_dialog("Saved.", false)
+		}
+
+		compile_and_check :: proc() -> (ok := false) {
+			success, err_qnt := compile()
+			if !success {
+				open_dialog("There is compile errors.", true)
+				return
+			}
+			ok = true
+			return
 		}
 
 		switch execution_status {
@@ -516,22 +621,28 @@ draw_top_bar_and_handle_shortcuts :: proc() {
         case .Editing:
 
         	if ray.IsKeyPressed(.F3) || btn_state[SAVE_AS_BTN + 1] == .Clicked {
-        		cpu_reset(&main_cpu)
-        		execution_status = .Waiting
-        		reset_top_bar(init_x)
+        		if compile_and_check() {
+	        		cpu_reset(&main_cpu)
+	        		execution_status = .Waiting
+	        		reset_top_bar(init_x)
+        		}
         	}
 
         	if ray.IsKeyPressed(.F6) || btn_state[SAVE_AS_BTN + 2] == .Clicked {
-        		cpu_reset(&main_cpu)
-        		main_cpu.pc = u16(cursor.ins)
-        		execution_status = .Waiting
-        		reset_top_bar(init_x)
+        		if compile_and_check() {
+	        		cpu_reset(&main_cpu)
+	        		main_cpu.pc = u16(cursor.ins)
+	        		execution_status = .Waiting
+	        		reset_top_bar(init_x)
+        		}
         	}
 
         	if ray.IsKeyPressed(.F4) || btn_state[SAVE_AS_BTN + 3] == .Clicked {
-        		cpu_reset(&main_cpu)
-        		execution_status = .Running
-        		reset_top_bar(init_x)
+        		if compile_and_check() {
+	        		cpu_reset(&main_cpu)
+	        		execution_status = .Running
+	        		reset_top_bar(init_x)
+        		}
         	}
 
         case .Running:
@@ -961,7 +1072,9 @@ process_editor_input :: proc() {
 		
 		move_down()
 
-		cursor.param = 0		
+		cursor.param = 0
+
+		unsaved = true	
 	}
 
 	delete_line :: proc() {
@@ -987,6 +1100,7 @@ process_editor_input :: proc() {
 			cursor.in_label = false
 			sl_remove(&main_cpu.labels, u32(cursor.label))
 		}
+		unsaved = true
 	}
 
 	if ray.IsKeyPressed(.UP)  do move_up()
@@ -1010,6 +1124,7 @@ process_editor_input :: proc() {
 		if l {
 			push_label("", u16(cursor.ins))
 			move_up()
+			unsaved = true
 		}
 	} else {
 		if left {
@@ -1065,6 +1180,7 @@ process_editor_input :: proc() {
 		if cursor.char > 0 {
 			sl_remove(char_buffer, cursor.char - 1)
 			cursor.char -= 1
+			unsaved = true
 		} else if cursor.param > 0 {
 			cursor.param -= 1
 			update_char_cursor()
@@ -1078,6 +1194,7 @@ process_editor_input :: proc() {
 	    	if !(key == ' ' && cursor.param < 3) {
 	    		sl_insert(char_buffer, byte(key), cursor.char)
 	    		cursor.char += 1
+	    		unsaved = true
 			} else {
 				cursor.param += 1
 				update_char_cursor()
@@ -1175,6 +1292,7 @@ main :: proc() {
         draw_memory()
         draw_status(i32(err_qnt))
         draw_video_buffer()
+        draw_dialog_if_exists()
 
         has_errs, err_qnt = compile()
 
