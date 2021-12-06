@@ -31,6 +31,7 @@ Config :: struct {
 	memory_label_font_color:         ray.Color,
 	memory_value_font_color:         ray.Color,
 	gamepad_input_table:             Input_Table,
+	popup_background_alpha:          u8,
 }
 
 Cursor :: struct {
@@ -73,6 +74,7 @@ config := Config{
 	memory_font_size=16,
 	memory_label_font_color=ray.Color{221, 199, 79, 255},
 	memory_value_font_color=ray.WHITE,
+	popup_background_alpha=196,
 }
 cursor: Cursor
 buffer_status: [MAX_INSTRUCTIONS*4]BufferStatus
@@ -85,9 +87,16 @@ unsaved := false
 have_editing_path := false
 editing_path: cstring
 editing_file_name: string
+
 dialog_alpha : f64 = 0.0
 dialog_msg: cstring = "There is some errors in code."
 dialog_bad := true
+
+is_yes_or_no_popup_open := false
+actual_popup_background_alpha := 0.0
+actual_popup_position: i32
+popup_msg: cstring = "Abacaxi?"
+popup_height: i32
 
 compile :: proc() -> (success := true, err_qnt: int) {
 	sl_clear(&main_cpu.instructions)
@@ -320,6 +329,83 @@ push_label :: proc(str: string, line: u16) {
 	label.line = line
 
 	sl_push(&main_cpu.labels, label)
+}
+
+open_yes_or_no_popup :: proc(text: cstring) {
+	using config
+	popup_height = top_bar_height + 8*4 + editor_font_size
+	actual_popup_position = -popup_height
+	actual_popup_background_alpha = 0.0
+	popup_msg = text
+	is_yes_or_no_popup_open = true
+}
+
+draw_yes_or_no_popup :: proc() {
+	using config
+
+	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
+	draw_text_btn :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
+	draw_text_shortcut_hint :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
+		ray.DrawTextEx(config.top_bar_shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+	}
+
+	{
+		actual_popup_background_alpha += (1.0 - actual_popup_background_alpha) / 12 
+
+		c := ray.BLACK
+		c.a = u8(f64(popup_background_alpha) * actual_popup_background_alpha)
+
+		ray.DrawRectangle(0, 0, window_width, window_height, c)
+	}
+
+	{
+		line_color := ray.LIGHTGRAY
+		line_color.a = 48
+
+		target_y := window_height / 2 - popup_height / 2
+		actual_popup_position += (target_y - actual_popup_position) / 6
+		x := window_width / 2 - 400 / 2
+
+		c := background_color
+
+		ray.DrawRectangle(x, actual_popup_position, 400, popup_height, c)
+		ray.DrawRectangleLines(x, actual_popup_position, 400, popup_height, line_color)
+		draw_text(popup_msg, x + 8, actual_popup_position + 8, editor_font_size, editor_font_color)
+
+		end_x := x + 400 - 8
+		y := actual_popup_position + 8*2 + editor_font_size
+		ray.DrawLine(x + 8, y, end_x, y, line_color)
+
+		button_width : i32 = 80
+
+		{
+			c := ray.GREEN
+			c.a = 128
+			btn_x := i32(x) + 400 - 8*2 - button_width*2
+			btn_y := actual_popup_position + popup_height - top_bar_height - 8
+			ray.DrawRectangleLines(btn_x, btn_y, button_width, top_bar_height, c)
+
+			draw_text_btn("Yes", btn_x + 4, btn_y + 2, memory_font_size, ray.LIGHTGRAY)
+			draw_text_shortcut_hint("ctrl+Y", btn_x + 4, btn_y + 2 + memory_font_size, top_bar_shortcut_hint_font_size, ray.LIGHTGRAY)			
+		}
+
+		{
+			c := editor_error_highlight_color
+			c.a = 128
+			btn_x := i32(x) + 400 - 8 - button_width
+			btn_y := actual_popup_position + popup_height - top_bar_height - 8
+			ray.DrawRectangleLines(btn_x, btn_y, button_width, top_bar_height, c)
+
+			draw_text_btn("No", btn_x + 4, btn_y + 2, memory_font_size, ray.LIGHTGRAY)
+			draw_text_shortcut_hint("ctrl+N", btn_x + 4, btn_y + 2 + memory_font_size, top_bar_shortcut_hint_font_size, ray.LIGHTGRAY)			
+		}
+	}
 }
 
 open_dialog :: proc(text: cstring, bad: bool) {
@@ -646,8 +732,6 @@ draw_top_bar_and_handle_shortcuts :: proc() {
         	}
 
         case .Running:
-
-        	for i := 0; !cpu_clock(&main_cpu); i += 1 {}
 
         	if ray.IsKeyPressed(.E)  || btn_state[SAVE_AS_BTN + 1] == .Clicked {
         		execution_status = .Editing
@@ -1281,10 +1365,16 @@ main :: proc() {
 
         //check_line(cursor.ins)
 
-        if execution_status == .Editing {
-        	process_editor_input() //TODO
-        } else {
-        	set_gamepad_flags()
+        if ray.IsKeyPressed(.A) {
+			open_yes_or_no_popup("Yay?")
+		}
+
+        if !is_yes_or_no_popup_open {
+	        if execution_status == .Editing {
+    	    	process_editor_input() //TODO
+	        } else {
+    	    	set_gamepad_flags()
+        	}
         }
 
         draw_editor()
@@ -1294,7 +1384,15 @@ main :: proc() {
         draw_video_buffer()
         draw_dialog_if_exists()
 
-        has_errs, err_qnt = compile()
+        if !is_yes_or_no_popup_open {
+        	has_errs, err_qnt = compile()
+
+	        if execution_status == .Running {
+				for i := 0; !cpu_clock(&main_cpu); i += 1 {}
+			}
+		} else {
+			draw_yes_or_no_popup()
+		}
 
         ray.EndDrawing()
     }
