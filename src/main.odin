@@ -470,6 +470,10 @@ draw_yes_or_no_popup :: proc() {
 		mouse_x := ray.GetMouseX()
 		mouse_y := ray.GetMouseY()
 
+		ctrl      := ray.IsKeyDown(.LEFT_CONTROL)
+		y_pressed := ray.IsKeyPressed(.Y)
+		n_pressed := ray.IsKeyPressed(.N)
+
 		{
 			text_c: ray.Color
 
@@ -477,6 +481,13 @@ draw_yes_or_no_popup :: proc() {
 			background_c.a = 128
 			btn_x := i32(x) + 400 - 8*2 - button_width*2
 			btn_y := actual_popup_position + popup_height - top_bar_height - 8
+
+			if ctrl && y_pressed {
+				background_c.a = 255	
+				ray.DrawRectangle(btn_x, btn_y, button_width, top_bar_height, background_c)
+				popup_callback()
+				is_yes_or_no_popup_open = false
+			}
 
 			if mouse_x >= btn_x && mouse_x < (btn_x + button_width) && mouse_y >= btn_y && mouse_y <= (btn_y + top_bar_height) {
 				text_c = ray.BLACK
@@ -505,6 +516,13 @@ draw_yes_or_no_popup :: proc() {
 			background_c.a = 128
 			btn_x := i32(x) + 400 - 8 - button_width
 			btn_y := actual_popup_position + popup_height - top_bar_height - 8
+
+			if ctrl && n_pressed {
+				background_c.a = 255	
+				ray.DrawRectangle(btn_x, btn_y, button_width, top_bar_height, background_c)
+				popup_refuse_callback()
+				is_yes_or_no_popup_open = false
+			}
 
 			if mouse_x >= btn_x && mouse_x < (btn_x + button_width) && mouse_y >= btn_y && mouse_y <= (btn_y + top_bar_height) {
 				text_c = ray.BLACK
@@ -759,10 +777,32 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		}
 	}
 
-	{
+	if !is_yes_or_no_popup_open {
+		clean :: proc() {
+			sl_clear(&main_cpu.editing_buffers)
+			sl_clear(&main_cpu.labels)
+
+			set_buffer(0, 0, "nop")
+			push_label("RESET", 0)
+
+			cursor.char     = 0
+			cursor.ins      = 0
+			cursor.param    = 0
+			cursor.in_label = false
+			cursor.label    = 0
+
+			have_editing_path = false
+			unsaved = false
+		}
+
+		save_and_clean :: proc() {
+			save()
+			clean()
+		}	
+
 		if btn_state[NEW_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.N)) {
 			if unsaved {
-				open_yes_or_no_popup("There is unsaved things. Want to save?", save, dummy_callback)
+				open_yes_or_no_popup("There is unsaved things. Want to save?", save_and_clean, clean)
 			}
 		} else if btn_state[OPEN_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.O)) {
 			opt := sfd.Options{
@@ -1458,14 +1498,17 @@ main :: proc() {
 	config.gamepad_input_table.right[1].type   = .Gamepad_Axis
 	config.gamepad_input_table.right[1].gp_axis = Gamepad_Axis_Entry{ axis_number=0, positive=true }
 
-	if !load_cpu_from_file(&main_cpu, "save.pisc") {
+	/*if !load_cpu_from_file(&main_cpu, "save.pisc") {
 		set_buffer(0, 0, "nopis")
 		set_buffer(1, 0, "adding")
 		set_buffer(1, 1, "r0")
 		set_buffer(1, 2, "100")
 
 		push_label("LOOP", 1)
-	}
+	}*/
+
+	set_buffer(0, 0, "nop")
+	push_label("RESET", 0)
 
 	config.editor_font = ray.GetFontDefault()
 	ray.SetConfigFlags({.WINDOW_RESIZABLE})
@@ -1537,7 +1580,7 @@ main :: proc() {
         ray.EndDrawing()
     }
 
-    dump_cpu_to_file(&main_cpu, "save.pisc")
+    //dump_cpu_to_file(&main_cpu, "save.pisc")
 
     ray.CloseWindow()
 }
