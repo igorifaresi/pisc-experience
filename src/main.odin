@@ -96,6 +96,7 @@ is_yes_or_no_popup_open := false
 actual_popup_background_alpha := 0.0
 actual_popup_position: i32 = -8000
 popup_msg: cstring = "Abacaxi?"
+popup_first_frame: bool
 popup_callback: proc()
 popup_refuse_callback: proc()
 popup_height: i32
@@ -345,6 +346,7 @@ open_yes_or_no_popup :: proc(text: cstring, callback: proc(), refuse_callback: p
 	popup_msg = text
 	popup_callback = callback
 	popup_refuse_callback = refuse_callback
+	popup_first_frame = true
 	is_yes_or_no_popup_open = true
 }
 
@@ -482,7 +484,7 @@ draw_yes_or_no_popup :: proc() {
 			btn_x := i32(x) + 400 - 8*2 - button_width*2
 			btn_y := actual_popup_position + popup_height - top_bar_height - 8
 
-			if ctrl && y_pressed {
+			if ctrl && y_pressed && !popup_first_frame {
 				background_c.a = 255	
 				ray.DrawRectangle(btn_x, btn_y, button_width, top_bar_height, background_c)
 				popup_callback()
@@ -517,7 +519,7 @@ draw_yes_or_no_popup :: proc() {
 			btn_x := i32(x) + 400 - 8 - button_width
 			btn_y := actual_popup_position + popup_height - top_bar_height - 8
 
-			if ctrl && n_pressed {
+			if ctrl && n_pressed && !popup_first_frame {
 				background_c.a = 255	
 				ray.DrawRectangle(btn_x, btn_y, button_width, top_bar_height, background_c)
 				popup_refuse_callback()
@@ -544,6 +546,8 @@ draw_yes_or_no_popup :: proc() {
 			draw_text_shortcut_hint("ctrl+N", btn_x + 4, btn_y + 2 + memory_font_size, top_bar_shortcut_hint_font_size, text_c)
 		}
 	}
+
+	popup_first_frame = false
 }
 
 open_dialog :: proc(text: cstring, bad: bool) {
@@ -793,6 +797,8 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 
 			have_editing_path = false
 			unsaved = false
+
+			open_dialog("Reseted.", false)
 		}
 
 		save_and_clean :: proc() {
@@ -803,6 +809,8 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		if btn_state[NEW_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.N)) {
 			if unsaved {
 				open_yes_or_no_popup("There is unsaved things. Want to save?", save_and_clean, clean)
+			} else {
+				clean()
 			}
 		} else if btn_state[OPEN_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.O)) {
 			opt := sfd.Options{
@@ -1565,7 +1573,7 @@ main :: proc() {
         draw_video_buffer()
         draw_dialog_if_exists()
 
-        if !is_yes_or_no_popup_open {
+		if !is_yes_or_no_popup_open {
         	hide_yes_or_no_popup()
 
         	has_errs, err_qnt = compile()
