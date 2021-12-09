@@ -12,27 +12,29 @@ Config :: struct {
 	window_height:                   i32,
 	background_color:                ray.Color,
 	top_bar_height:                  i32,
-	top_bar_shortcut_hint_font:      ray.Font,
-	top_bar_shortcut_hint_font_size: i32,
-	editor_font_size:                i32,
+	shortcut_hint_font:      ray.Font,
+	shortcut_hint_font_size: i32,
+	primary_font_size:                i32,
 	editor_line_height:              i32,
 	editor_top_padding:              i32,
 	editor_left_padding:             i32,
 	editor_mnemonic_left_margin:     i32,
 	editor_param_left_margin:        i32,
-	editor_font:                     ray.Font,
+	primary_font:                     ray.Font,
 	editor_label_y_offset:           i32,
 	editor_label_x_offset:           i32,
-	editor_line_highlight_color:     ray.Color,
-	editor_error_highlight_color:    ray.Color,
-	editor_font_color:               ray.Color,
-	memory_font:                     ray.Font,
-	memory_font_size:                i32, 
-	memory_label_font_color:         ray.Color,
-	memory_value_font_color:         ray.Color,
+	line_highlight_color:     ray.Color,
+	error_color:                    ray.Color,
+	primary_font_color:               ray.Color,
+	secondary_font:                     ray.Font,
+	secondary_font_size:                i32, 
+	highlight_color:         ray.Color,
+	secondary_font_color:         ray.Color,
 	gamepad_input_table:             Input_Table,
 	popup_background_alpha:          u8,
 	line_color:                      ray.Color,
+	cpu_view_area_width: i32,
+	box_gap: i32,
 }
 
 Cursor :: struct {
@@ -60,8 +62,8 @@ config := Config{
 	window_height=600,
 	background_color=ray.Color{30, 31, 25, 255},
 	top_bar_height=32,
-	top_bar_shortcut_hint_font_size=12,
-	editor_font_size=20,
+	shortcut_hint_font_size=12,
+	primary_font_size=20,
 	editor_line_height=20,
 	editor_top_padding=64,
 	editor_left_padding=64,
@@ -69,14 +71,16 @@ config := Config{
 	editor_param_left_margin=60,
 	editor_label_y_offset=12,
 	editor_label_x_offset=8,
-	editor_line_highlight_color=ray.Color{70, 70, 70, 255},
-	editor_error_highlight_color=ray.Color{249, 36, 72, 255},
-	editor_font_color=ray.WHITE,
-	memory_font_size=16,
-	memory_label_font_color=ray.Color{221, 199, 79, 255},
-	memory_value_font_color=ray.WHITE,
+	line_highlight_color=ray.Color{70, 70, 70, 255},
+	error_color=ray.Color{249, 36, 72, 255},
+	primary_font_color=ray.WHITE,
+	secondary_font_size=16,
+	highlight_color=ray.Color{221, 199, 79, 255},
+	secondary_font_color=ray.WHITE,
 	popup_background_alpha=196,
 	line_color=ray.Color{200, 200, 200, 48},
+	cpu_view_area_width=730,
+	box_gap=4,
 }
 cursor: Cursor
 buffer_status: [MAX_INSTRUCTIONS*4]BufferStatus
@@ -342,7 +346,7 @@ push_label :: proc(str: string, line: u16) {
 
 open_yes_or_no_popup :: proc(text: cstring, callback: proc(), refuse_callback: proc()) {
 	using config
-	popup_height = top_bar_height + 8*4 + editor_font_size
+	popup_height = top_bar_height + 8*4 + primary_font_size
 	actual_popup_position = -popup_height
 	actual_popup_background_alpha = 0.0
 	popup_msg = text
@@ -356,15 +360,15 @@ hide_yes_or_no_popup :: proc() {
 	using config
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.primary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	draw_text_btn :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.secondary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	draw_text_shortcut_hint :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.top_bar_shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	{
@@ -389,10 +393,10 @@ hide_yes_or_no_popup :: proc() {
 
 		ray.DrawRectangle(x, actual_popup_position, 400, popup_height, c)
 		ray.DrawRectangleLines(x, actual_popup_position, 400, popup_height, line_color)
-		draw_text(popup_msg, x + 8, actual_popup_position + 8, editor_font_size, editor_font_color)
+		draw_text(popup_msg, x + 8, actual_popup_position + 8, primary_font_size, primary_font_color)
 
 		end_x := x + 400 - 8
-		y := actual_popup_position + 8*2 + editor_font_size
+		y := actual_popup_position + 8*2 + primary_font_size
 		ray.DrawLine(x + 8, y, end_x, y, line_color)
 
 		button_width : i32 = 80
@@ -407,22 +411,22 @@ hide_yes_or_no_popup :: proc() {
 			
 			ray.DrawRectangleLines(btn_x, btn_y, button_width, top_bar_height, background_c)
 
-			draw_text_btn("Yes", btn_x + 4, btn_y + 2, memory_font_size, text_c)
-			draw_text_shortcut_hint("ctrl+Y", btn_x + 4, btn_y + 2 + memory_font_size, top_bar_shortcut_hint_font_size, text_c)
+			draw_text_btn("Yes", btn_x + 4, btn_y + 2, secondary_font_size, text_c)
+			draw_text_shortcut_hint("ctrl+Y", btn_x + 4, btn_y + 2 + secondary_font_size, shortcut_hint_font_size, text_c)
 		}
 
 		{
 			text_c := ray.LIGHTGRAY
 
-			background_c := editor_error_highlight_color
+			background_c := error_color
 			background_c.a = 128
 			btn_x := i32(x) + 400 - 8 - button_width
 			btn_y := actual_popup_position + popup_height - top_bar_height - 8
 
 			ray.DrawRectangleLines(btn_x, btn_y, button_width, top_bar_height, background_c)
 
-			draw_text_btn("No", btn_x + 4, btn_y + 2, memory_font_size, text_c)
-			draw_text_shortcut_hint("ctrl+N", btn_x + 4, btn_y + 2 + memory_font_size, top_bar_shortcut_hint_font_size, text_c)
+			draw_text_btn("No", btn_x + 4, btn_y + 2, secondary_font_size, text_c)
+			draw_text_shortcut_hint("ctrl+N", btn_x + 4, btn_y + 2 + secondary_font_size, shortcut_hint_font_size, text_c)
 		}
 	}
 }
@@ -431,15 +435,15 @@ draw_yes_or_no_popup :: proc() {
 	using config
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.primary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	draw_text_btn :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.secondary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	draw_text_shortcut_hint :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.top_bar_shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	{
@@ -463,10 +467,10 @@ draw_yes_or_no_popup :: proc() {
 
 		ray.DrawRectangle(x, actual_popup_position, 400, popup_height, c)
 		ray.DrawRectangleLines(x, actual_popup_position, 400, popup_height, line_color)
-		draw_text(popup_msg, x + 8, actual_popup_position + 8, editor_font_size, editor_font_color)
+		draw_text(popup_msg, x + 8, actual_popup_position + 8, primary_font_size, primary_font_color)
 
 		end_x := x + 400 - 8
-		y := actual_popup_position + 8*2 + editor_font_size
+		y := actual_popup_position + 8*2 + primary_font_size
 		ray.DrawLine(x + 8, y, end_x, y, line_color)
 
 		button_width : i32 = 80
@@ -509,14 +513,14 @@ draw_yes_or_no_popup :: proc() {
 				ray.DrawRectangleLines(btn_x, btn_y, button_width, top_bar_height, background_c)
 			}
 
-			draw_text_btn("Yes", btn_x + 4, btn_y + 2, memory_font_size, text_c)
-			draw_text_shortcut_hint("ctrl+Y", btn_x + 4, btn_y + 2 + memory_font_size, top_bar_shortcut_hint_font_size, text_c)
+			draw_text_btn("Yes", btn_x + 4, btn_y + 2, secondary_font_size, text_c)
+			draw_text_shortcut_hint("ctrl+Y", btn_x + 4, btn_y + 2 + secondary_font_size, shortcut_hint_font_size, text_c)
 		}
 
 		{
 			text_c: ray.Color
 
-			background_c := editor_error_highlight_color
+			background_c := error_color
 			background_c.a = 128
 			btn_x := i32(x) + 400 - 8 - button_width
 			btn_y := actual_popup_position + popup_height - top_bar_height - 8
@@ -544,8 +548,8 @@ draw_yes_or_no_popup :: proc() {
 				ray.DrawRectangleLines(btn_x, btn_y, button_width, top_bar_height, background_c)
 			}
 
-			draw_text_btn("No", btn_x + 4, btn_y + 2, memory_font_size, text_c)
-			draw_text_shortcut_hint("ctrl+N", btn_x + 4, btn_y + 2 + memory_font_size, top_bar_shortcut_hint_font_size, text_c)
+			draw_text_btn("No", btn_x + 4, btn_y + 2, secondary_font_size, text_c)
+			draw_text_shortcut_hint("ctrl+N", btn_x + 4, btn_y + 2 + secondary_font_size, shortcut_hint_font_size, text_c)
 		}
 	}
 
@@ -562,12 +566,12 @@ draw_dialog_if_exists :: proc() {
 	using config
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.secondary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	x : i32 = 12
 	width  : i32 = window_width - 12*2 - 730 
-	height : i32 = memory_font_size + 4*2
+	height : i32 = secondary_font_size + 4*2
 	y : i32 = window_height - height - 12
 	
 	c := background_color
@@ -588,13 +592,13 @@ draw_dialog_if_exists :: proc() {
 	ray.DrawRectangleLines(x, y, width, height, c)
 
 	if dialog_bad {
-		c = editor_error_highlight_color
+		c = error_color
 	} else {
-		c = editor_font_color
+		c = primary_font_color
 	}
 
 	c.a = u8(f64(c.a) * dialog_alpha)
-	draw_text(dialog_msg, x + 12, y + 3, memory_font_size, c)
+	draw_text(dialog_msg, x + 12, y + 3, secondary_font_size, c)
 
 	if dialog_bad {
 		dialog_alpha -= (1.00001 - dialog_alpha) / 32
@@ -614,7 +618,7 @@ draw_status :: proc(err_qnt: i32) {
 	using config
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.secondary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	
@@ -660,11 +664,11 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 	using config
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.secondary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 	
 	draw_text_shortcut_hint :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.top_bar_shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.shortcut_hint_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	reset_top_bar :: proc(init_x: i32) {
@@ -674,12 +678,12 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		}
 	}
 
-	c := editor_line_highlight_color
+	c := line_highlight_color
 
 	mouse_x := ray.GetMouseX()
 	mouse_y := ray.GetMouseY()
 
-	init_x : i32 = window_width - 735
+	init_x : i32 = window_width - cpu_view_area_width - box_gap - 1
 	end_x  : i32 = window_width
 	init_y : i32 = 0
 	end_y  : i32 = top_bar_height
@@ -916,7 +920,7 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 			text_color          = ray.BLACK
 			shortcut_hint_color = ray.BLACK
 
-			ray.DrawRectangle(x + 1, 1, button_width - 2, top_bar_height - 2, memory_label_font_color)
+			ray.DrawRectangle(x + 1, 1, button_width - 2, top_bar_height - 2, highlight_color)
 
 		case .Clicked:
 			ray.DrawRectangle(x, 0, button_width, top_bar_height, ray.WHITE)
@@ -925,8 +929,8 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		text_color.a          = u8(btn_alpha[i])
 		shortcut_hint_color.a = u8(btn_alpha[i])
 
-		draw_text(btn_text[i], x + 4, 2, memory_font_size, text_color)
-		draw_text_shortcut_hint(btn_shortcut_text[i], x + 4, 2 + memory_font_size, top_bar_shortcut_hint_font_size, shortcut_hint_color)
+		draw_text(btn_text[i], x + 4, 2, secondary_font_size, text_color)
+		draw_text_shortcut_hint(btn_shortcut_text[i], x + 4, 2 + secondary_font_size, shortcut_hint_font_size, shortcut_hint_color)
 	}
 }
 
@@ -934,14 +938,14 @@ draw_cpu :: proc() {
 	using config
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.secondary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	draw_border :: proc(init_x, init_y, end_x, end_y: i32) {
 		init_border_x := init_x - 4
 		init_border_y := init_y - 2
-		end_border_x  := (end_x - init_border_x) - 4
-		end_border_y  := (end_y - init_border_y) - 4 
+		end_border_x  := (end_x - init_border_x) - box_gap
+		end_border_y  := (end_y - init_border_y) - box_gap
 		ray.DrawRectangleLines(init_border_x, init_border_y, end_border_x, end_border_y, config.line_color)
 	}
 
@@ -953,30 +957,31 @@ draw_cpu :: proc() {
 		return (config.window_height - x) - 1 
 	}
 
-	reg_init_x : i32 =  window_width  - 730
+	reg_init_x : i32 =  window_width  - cpu_view_area_width
 	reg_init_y : i32 = (window_height - 28*4) - 28 + 16
 	x := reg_init_x
 	y := reg_init_y - 8
+	space_between_cols := cpu_view_area_width / 8
 	i : i32
-	draw_text("REGISTERS", x, reg_init_y, memory_font_size, ray.LIGHTGRAY)
+	draw_text("REGISTERS", x, reg_init_y, secondary_font_size, ray.LIGHTGRAY)
 	for name, reg in registers_table {
 		if i%8 == 0 { 
 			y += 28
-			x = window_width - 730 - 90
+			x = window_width - cpu_view_area_width - space_between_cols
 		}
 
-		x += 90
-		draw_text(ray.TextFormat("%s:", name), x, y, memory_font_size, memory_label_font_color)
+		x += space_between_cols
+		draw_text(ray.TextFormat("%s:", name), x, y, secondary_font_size, highlight_color)
 
 		value := main_cpu.reg_table[int(reg)]
-		draw_text(ray.TextFormat("%d", value), x + 32, y, memory_font_size, memory_value_font_color)
+		draw_text(ray.TextFormat("%d", value), x + 32, y, secondary_font_size, secondary_font_color)
 
 		i += 1
 	}
 
-	x = window_width - 730 + 7*90
-	draw_text("pc:", x, y, memory_font_size, memory_label_font_color)
-	draw_text(ray.TextFormat("%d", main_cpu.pc), x + 32, y, memory_font_size, memory_value_font_color)
+	x = window_width - cpu_view_area_width + 7*space_between_cols
+	draw_text("pc:", x, y, secondary_font_size, highlight_color)
+	draw_text(ray.TextFormat("%d", main_cpu.pc), x + 32, y, secondary_font_size, secondary_font_color)
 
 	draw_border(reg_init_x, reg_init_y, window_width + 3, window_height + 3)
 	
@@ -984,8 +989,9 @@ draw_cpu :: proc() {
 	ram_init_y : i32 = top_bar_height + 4
 	x = ram_init_x
 	y = ram_init_y - 8
+	//space_between_cols = 
 	i = 0
-	draw_text("RAM", x, ram_init_y, memory_font_size, ray.LIGHTGRAY)
+	draw_text("RAM", x, ram_init_y, secondary_font_size, ray.LIGHTGRAY)
 
 	regs_len := window_height - 28*5
 	for b := 0; b < len(main_cpu.mem); b += 1 {
@@ -995,11 +1001,11 @@ draw_cpu :: proc() {
 
 			x = window_width - 80*3
 
-			draw_text(ray.TextFormat("%d", i), x, y, memory_font_size, memory_label_font_color)
+			draw_text(ray.TextFormat("%d", i), x, y, secondary_font_size, highlight_color)
 			x += 48
 		}
 
-		draw_text(ray.TextFormat("%x", main_cpu.mem[b]), x, y, memory_font_size, memory_value_font_color)
+		draw_text(ray.TextFormat("%x", main_cpu.mem[b]), x, y, secondary_font_size, secondary_font_color)
 		x += 46
 
 		i += 1
@@ -1007,24 +1013,24 @@ draw_cpu :: proc() {
 
 	draw_border(ram_init_x, ram_init_y, window_width + 3, reg_init_y - 2)
 
-	call_s_init_x : i32 = window_width  - 730
+	call_s_init_x : i32 = window_width  - cpu_view_area_width
 	call_s_init_y : i32 = GPU_BUFFER_H + 32 + top_bar_height + 8
 	x = call_s_init_x
 	y = call_s_init_y - 8
 	i = 0
-	draw_text("CALL STACK", x, call_s_init_y, memory_font_size, ray.LIGHTGRAY)
+	draw_text("CALL STACK", x, call_s_init_y, secondary_font_size, ray.LIGHTGRAY)
 	call_stack := sl_slice(&main_cpu.call_stack)
 	if len(call_stack) != 0 {
 		for addr in call_stack {
 			//TODO
 		}
 	} else {
-		draw_text("EMPTY CALL STACK", x, y + 8 + 28, memory_font_size, ray.GRAY)
+		draw_text("EMPTY CALL STACK", x, y + 8 + 28, secondary_font_size, ray.GRAY)
 	}
 
 	draw_border(call_s_init_x, call_s_init_y, ram_init_x - 4, reg_init_y - 2)
 
-	screen_init_x := window_width  - 730
+	screen_init_x := window_width  - cpu_view_area_width
 	screen_init_y := top_bar_height + 4
 	x = screen_init_x
 	y = screen_init_y - 8 
@@ -1032,26 +1038,38 @@ draw_cpu :: proc() {
 
 	switch execution_status {
 	case .Running:
-		draw_text("RUNNING", x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+		draw_text("RUNNING", x, screen_init_y, secondary_font_size, ray.LIGHTGRAY)
 	case .Waiting:
-		draw_text("DEBUGGING", x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+		draw_text("DEBUGGING", x, screen_init_y, secondary_font_size, ray.LIGHTGRAY)
 	case .Editing:
-		draw_text(ray.TextFormat("EDITING(%d)errors", err_qnt), x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+		draw_text(ray.TextFormat("EDITING(%d)errors", err_qnt), x, screen_init_y, secondary_font_size, ray.LIGHTGRAY)
 	}
 
 	{
-		cstr := strings.clone_to_cstring(editing_file_name)
-		if unsaved do cstr = ray.TextFormat("*%s", cstr)
-		file_name_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
-		new_x := (x + (x + GPU_BUFFER_W)) / 2 - file_name_size / 2
-		draw_text(cstr, new_x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+		cstr: cstring
+		if have_editing_path {
+			cstr = strings.clone_to_cstring(editing_file_name)
+			if unsaved do cstr = ray.TextFormat("*%s", cstr)
+			file_name_size := i32(ray.MeasureTextEx(secondary_font, cstr, f32(secondary_font_size), 1.0).x)
+			new_x := (x + (x + GPU_BUFFER_W)) / 2 - file_name_size / 2
+			draw_text(cstr, new_x, screen_init_y, secondary_font_size, ray.LIGHTGRAY)
+		} else {
+			if !unsaved {
+				cstr = "untitled"
+			} else {
+				cstr = "*untitled"
+			}
+			file_name_size := i32(ray.MeasureTextEx(secondary_font, cstr, f32(secondary_font_size), 1.0).x)
+			new_x := (x + (x + GPU_BUFFER_W)) / 2 - file_name_size / 2
+			draw_text(cstr, new_x, screen_init_y, secondary_font_size, highlight_color)		
+		}
 	}
 
 	{
 		cstr := ray.TextFormat("FPS: %d", ray.GetFPS())
-		fps_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
+		fps_size := i32(ray.MeasureTextEx(secondary_font, cstr, f32(secondary_font_size), 1.0).x)
 		new_x := (x + GPU_BUFFER_W) - fps_size
-		draw_text(cstr, new_x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+		draw_text(cstr, new_x, screen_init_y, secondary_font_size, ray.LIGHTGRAY)
 	}
 
 	{
@@ -1064,7 +1082,7 @@ draw_cpu :: proc() {
 		}
 
 		offset_y : i32 = 31 + top_bar_height
-		offset_x : i32 = window_width  - 731
+		offset_x : i32 = window_width  - cpu_view_area_width - 1
 
 		for y = 0; y < GPU_BUFFER_H; y += 1 {
 			for x = 0; x < GPU_BUFFER_W; x += 1 {
@@ -1085,7 +1103,7 @@ draw_editor :: proc() {
 			return ray.YELLOW
 		}
 
-		return config.editor_font_color
+		return config.primary_font_color
 	}
 
 	get_buffer_cstr :: proc(i: int) -> cstring {
@@ -1110,24 +1128,24 @@ draw_editor :: proc() {
 
 		cstr          := lookup_buffer(i_ins, i_param)
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
-		cursor_offset := i32(ray.MeasureTextEx(config.editor_font, first_half, f32(config.editor_font_size), 1.0).x)
+		cursor_offset := i32(ray.MeasureTextEx(config.primary_font, first_half, f32(config.primary_font_size), 1.0).x)
 		cursor_x      := x + cursor_offset
-		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
+		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
 	}
 
 	draw_cursor_label :: proc(x, y: i32, cstr: cstring) {
 		lerp_cursor(y)
 
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
-		cursor_offset := i32(ray.MeasureTextEx(config.editor_font, first_half, f32(config.editor_font_size), 1.0).x)
+		cursor_offset := i32(ray.MeasureTextEx(config.primary_font, first_half, f32(config.primary_font_size), 1.0).x)
 		cursor_x      := x + cursor_offset
-		ray.DrawLine(cursor_x, y, cursor_x, y + config.editor_font_size, ray.LIGHTGRAY)
+		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
 	}
 
 	draw_err_indication :: proc(x: i32, y: i32, cstr: cstring) {
-		word_size := i32(ray.MeasureTextEx(config.editor_font, cstr, f32(config.editor_font_size), 1.0).x)
-		tmp_y := y + config.editor_font_size
-		ray.DrawLine(x, tmp_y, x + word_size, tmp_y, config.editor_error_highlight_color)
+		word_size := i32(ray.MeasureTextEx(config.primary_font, cstr, f32(config.primary_font_size), 1.0).x)
+		tmp_y := y + config.primary_font_size
+		ray.DrawLine(x, tmp_y, x + word_size, tmp_y, config.error_color)
 	}
 
 	get_total_editor_height :: proc() -> (y: i32) {
@@ -1156,7 +1174,7 @@ draw_editor :: proc() {
 	}
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
-		ray.DrawTextEx(config.editor_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
+		ray.DrawTextEx(config.primary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
 	i_ins: u32 = 0
@@ -1165,7 +1183,7 @@ draw_editor :: proc() {
 
 	line_number_x: i32 = editor_left_padding / 2 //TODO: gambiarra
 
-	highlight_line_width := window_width - 730 - 8
+	highlight_line_width := window_width - 730 - 4
 
 	buffers := sl_slice(&main_cpu.editing_buffers)
 	for line := 0; line < len(buffers); line += 4 {
@@ -1176,12 +1194,12 @@ draw_editor :: proc() {
 
 			if label.line == u16(i_ins) {
 				cstr := lookup_label(u32(i))
-				c := config.editor_font_color
+				c := config.primary_font_color
 				if cursor.in_label && cursor.label == u32(i) do c = ray.YELLOW
 
 				y += editor_label_y_offset
 				draw_text(ray.TextFormat("%s:", cstr), 
-					editor_label_x_offset, y, editor_font_size, c)
+					editor_label_x_offset, y, primary_font_size, c)
 
 				if cursor.in_label && cursor.label == u32(i) {
 					draw_cursor_label(editor_label_x_offset, y, cstr)
@@ -1192,15 +1210,15 @@ draw_editor :: proc() {
 
 		if execution_status == .Waiting && u16(i_ins) == main_cpu.pc {
 			lerp_cursor(y)
-			ray.DrawRectangle(0, y, highlight_line_width, editor_font_size, editor_line_highlight_color)
+			ray.DrawRectangle(0, y, highlight_line_width, primary_font_size, line_highlight_color)
 		}
 
-		draw_text(ray.TextFormat("%d", i_ins), line_number_x, y, editor_font_size, ray.GRAY)
+		draw_text(ray.TextFormat("%d", i_ins), line_number_x, y, primary_font_size, ray.GRAY)
 
 		tmp_x := x
 
 		cstr := get_buffer_cstr(line)
-		draw_text(cstr, tmp_x, y, editor_font_size, get_color(i_ins, 0))
+		draw_text(cstr, tmp_x, y, primary_font_size, get_color(i_ins, 0))
 		if execution_status == .Editing {
 			if !cursor.in_label && cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
 			if buffer_status[line] == .Invalid do draw_err_indication(tmp_x, y, cstr)
@@ -1210,7 +1228,7 @@ draw_editor :: proc() {
 
 		for i: u32 = 1; i < 4; i += 1 {
 			cstr := get_buffer_cstr(line + int(i))
-			draw_text(cstr, tmp_x, y, editor_font_size, get_color(i_ins, i))
+			draw_text(cstr, tmp_x, y, primary_font_size, get_color(i_ins, i))
 			if execution_status == .Editing {
 				if !cursor.in_label && cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
 				if buffer_status[line + int(i)] == .Invalid do draw_err_indication(tmp_x, y, cstr)
@@ -1561,7 +1579,7 @@ main :: proc() {
 	set_buffer(0, 0, "nop")
 	push_label("RESET", 0)
 
-	config.editor_font = ray.GetFontDefault()
+	config.primary_font = ray.GetFontDefault()
 	ray.SetConfigFlags({.WINDOW_RESIZABLE})
     ray.InitWindow(config.window_width, config.window_height, "PISC Experience");
 
@@ -1569,9 +1587,9 @@ main :: proc() {
 
     //toggle_fullscreen()
 
-    config.editor_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.editor_font_size, nil, 0) 
-    config.memory_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.memory_font_size, nil, 0)
-    config.top_bar_shortcut_hint_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.top_bar_shortcut_hint_font_size, nil, 0)
+    config.primary_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.primary_font_size, nil, 0) 
+    config.secondary_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.secondary_font_size, nil, 0)
+    config.shortcut_hint_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.shortcut_hint_font_size, nil, 0)
 
     save_and_go_out :: proc() {
     	save()
