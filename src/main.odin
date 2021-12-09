@@ -32,6 +32,7 @@ Config :: struct {
 	memory_value_font_color:         ray.Color,
 	gamepad_input_table:             Input_Table,
 	popup_background_alpha:          u8,
+	line_color:                      ray.Color,
 }
 
 Cursor :: struct {
@@ -75,6 +76,7 @@ config := Config{
 	memory_label_font_color=ray.Color{221, 199, 79, 255},
 	memory_value_font_color=ray.WHITE,
 	popup_background_alpha=196,
+	line_color=ray.Color{200, 200, 200, 48},
 }
 cursor: Cursor
 buffer_status: [MAX_INSTRUCTIONS*4]BufferStatus
@@ -577,6 +579,10 @@ draw_dialog_if_exists :: proc() {
 	ray.DrawRectangle(x, y, width, height, c)
 
 	c = ray.LIGHTGRAY
+	c.r += 8
+	c.g += 8
+	c.b += 8
+	c.a = 48
 	c.a = u8(f64(c.a) * dialog_alpha)
 	
 	ray.DrawRectangleLines(x, y, width, height, c)
@@ -601,20 +607,7 @@ draw_dialog_if_exists :: proc() {
 draw_video_buffer :: proc() {
 	using config
 
-	pisc_color_to_rbg :: proc(pisc_color: u16) -> (rgb: ray.Color) {
-		rgb.r = u8(((pisc_color       & 0b00000000_00011111) * 255) / 31)
-		rgb.g = u8(((pisc_color >> 5  & 0b00000000_00011111) * 255) / 31)
-		rgb.b = u8(((pisc_color >> 10 & 0b00000000_00011111) * 255) / 31) 
-		rgb.a = 255
-		return
-	}
-
-	for y : i32 = 0; y < GPU_BUFFER_H; y += 1 {
-		for x : i32 = 0; x < GPU_BUFFER_W; x += 1 {
-			pisc_color := main_cpu.gpu.buffer[y*GPU_BUFFER_W + x]
-			ray.DrawPixel(window_width  - 730 + x, y + 32 + top_bar_height, pisc_color_to_rbg(pisc_color));
-		}
-	}
+	
 }
 
 draw_status :: proc(err_qnt: i32) {
@@ -624,37 +617,7 @@ draw_status :: proc(err_qnt: i32) {
 		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
-	x: i32 = window_width  - 730
-	y: i32 = top_bar_height
-	i: i32 = 0
-	/*draw_text(ray.TextFormat("STATUS: RUNNING, ERRORS: %d", err_qnt),
-		x, y + 8, memory_font_size, ray.LIGHTGRAY)
-	draw_text(ray.TextFormat("FPS: %d", ray.GetFPS()),
-		x + 250, y + 8, memory_font_size, ray.LIGHTGRAY)*/
-
-	switch execution_status {
-	case .Running:
-		draw_text("RUNNING", x, y + 8, memory_font_size, ray.LIGHTGRAY)
-	case .Waiting:
-		draw_text("DEBUGGING", x, y + 8, memory_font_size, ray.LIGHTGRAY)
-	case .Editing:
-		draw_text(ray.TextFormat("EDITING(%d)errors", err_qnt), x, y + 8, memory_font_size, ray.LIGHTGRAY)
-	}
-
-	{
-		cstr := strings.clone_to_cstring(editing_file_name)
-		if unsaved do cstr = ray.TextFormat("*%s", cstr)
-		file_name_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
-		new_x := (x + (x + GPU_BUFFER_W)) / 2 - file_name_size / 2
-		draw_text(cstr, new_x, y + 8, memory_font_size, ray.LIGHTGRAY)
-	}
-
-	{
-		cstr := ray.TextFormat("FPS: %d", ray.GetFPS())
-		fps_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
-		new_x := (x + GPU_BUFFER_W) - fps_size
-		draw_text(cstr, new_x, y + 8, memory_font_size, ray.LIGHTGRAY)
-	}
+	
 }
 
 //btn_position: [7]i32 = {730, 730, 730, 730, 730, 730, 730}
@@ -716,7 +679,7 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 	mouse_x := ray.GetMouseX()
 	mouse_y := ray.GetMouseY()
 
-	init_x : i32 = window_width - 730
+	init_x : i32 = window_width - 735
 	end_x  : i32 = window_width
 	init_y : i32 = 0
 	end_y  : i32 = top_bar_height
@@ -967,17 +930,35 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 	}
 }
 
-draw_memory :: proc() {
+draw_cpu :: proc() {
 	using config
 
 	draw_text :: proc(cstr: cstring, x, y, font_size: i32, color: ray.Color) {
 		ray.DrawTextEx(config.memory_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
-	x : i32 =  window_width  - 730
-	y : i32 = (window_height - 28*4) - 28
+	draw_border :: proc(init_x, init_y, end_x, end_y: i32) {
+		init_border_x := init_x - 4
+		init_border_y := init_y - 2
+		end_border_x  := (end_x - init_border_x) - 4
+		end_border_y  := (end_y - init_border_y) - 4 
+		ray.DrawRectangleLines(init_border_x, init_border_y, end_border_x, end_border_y, config.line_color)
+	}
+
+	stop_on_h_border :: proc(x: i32) -> i32 {
+		return (config.window_width - x) - 1 
+	}
+
+	stop_on_v_border :: proc(x: i32) -> i32 {
+		return (config.window_height - x) - 1 
+	}
+
+	reg_init_x : i32 =  window_width  - 730
+	reg_init_y : i32 = (window_height - 28*4) - 28 + 16
+	x := reg_init_x
+	y := reg_init_y - 8
 	i : i32
-	draw_text("REGISTERS", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	draw_text("REGISTERS", x, reg_init_y, memory_font_size, ray.LIGHTGRAY)
 	for name, reg in registers_table {
 		if i%8 == 0 { 
 			y += 28
@@ -997,10 +978,14 @@ draw_memory :: proc() {
 	draw_text("pc:", x, y, memory_font_size, memory_label_font_color)
 	draw_text(ray.TextFormat("%d", main_cpu.pc), x + 32, y, memory_font_size, memory_value_font_color)
 
-	x = window_width - 80*3
-	y = top_bar_height
+	draw_border(reg_init_x, reg_init_y, window_width + 3, window_height + 3)
+	
+	ram_init_x : i32 = window_width - 80*3
+	ram_init_y : i32 = top_bar_height + 4
+	x = ram_init_x
+	y = ram_init_y - 8
 	i = 0
-	draw_text("RAM", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	draw_text("RAM", x, ram_init_y, memory_font_size, ray.LIGHTGRAY)
 
 	regs_len := window_height - 28*5
 	for b := 0; b < len(main_cpu.mem); b += 1 {
@@ -1020,10 +1005,14 @@ draw_memory :: proc() {
 		i += 1
 	}
 
-	x =  window_width  - 730
-	y = GPU_BUFFER_H + 32 + top_bar_height
+	draw_border(ram_init_x, ram_init_y, window_width + 3, reg_init_y - 2)
+
+	call_s_init_x : i32 = window_width  - 730
+	call_s_init_y : i32 = GPU_BUFFER_H + 32 + top_bar_height + 8
+	x = call_s_init_x
+	y = call_s_init_y - 8
 	i = 0
-	draw_text("CALL STACK", x, y + 8, memory_font_size, ray.LIGHTGRAY)
+	draw_text("CALL STACK", x, call_s_init_y, memory_font_size, ray.LIGHTGRAY)
 	call_stack := sl_slice(&main_cpu.call_stack)
 	if len(call_stack) != 0 {
 		for addr in call_stack {
@@ -1032,6 +1021,60 @@ draw_memory :: proc() {
 	} else {
 		draw_text("EMPTY CALL STACK", x, y + 8 + 28, memory_font_size, ray.GRAY)
 	}
+
+	draw_border(call_s_init_x, call_s_init_y, ram_init_x - 4, reg_init_y - 2)
+
+	screen_init_x := window_width  - 730
+	screen_init_y := top_bar_height + 4
+	x = screen_init_x
+	y = screen_init_y - 8 
+	i = 0
+
+	switch execution_status {
+	case .Running:
+		draw_text("RUNNING", x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+	case .Waiting:
+		draw_text("DEBUGGING", x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+	case .Editing:
+		draw_text(ray.TextFormat("EDITING(%d)errors", err_qnt), x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+	}
+
+	{
+		cstr := strings.clone_to_cstring(editing_file_name)
+		if unsaved do cstr = ray.TextFormat("*%s", cstr)
+		file_name_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
+		new_x := (x + (x + GPU_BUFFER_W)) / 2 - file_name_size / 2
+		draw_text(cstr, new_x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+	}
+
+	{
+		cstr := ray.TextFormat("FPS: %d", ray.GetFPS())
+		fps_size := i32(ray.MeasureTextEx(memory_font, cstr, f32(memory_font_size), 1.0).x)
+		new_x := (x + GPU_BUFFER_W) - fps_size
+		draw_text(cstr, new_x, screen_init_y, memory_font_size, ray.LIGHTGRAY)
+	}
+
+	{
+		pisc_color_to_rbg :: proc(pisc_color: u16) -> (rgb: ray.Color) {
+			rgb.r = u8(((pisc_color       & 0b00000000_00011111) * 255) / 31)
+			rgb.g = u8(((pisc_color >> 5  & 0b00000000_00011111) * 255) / 31)
+			rgb.b = u8(((pisc_color >> 10 & 0b00000000_00011111) * 255) / 31) 
+			rgb.a = 255
+			return
+		}
+
+		offset_y : i32 = 31 + top_bar_height
+		offset_x : i32 = window_width  - 731
+
+		for y = 0; y < GPU_BUFFER_H; y += 1 {
+			for x = 0; x < GPU_BUFFER_W; x += 1 {
+				pisc_color := main_cpu.gpu.buffer[y*GPU_BUFFER_W + x]
+				ray.DrawPixel(offset_x + x, y + offset_y, pisc_color_to_rbg(pisc_color));
+			}
+		}
+	}
+
+	draw_border(screen_init_x, screen_init_y, ram_init_x - 4, call_s_init_y - 2)
 }
 
 draw_editor :: proc() {
@@ -1530,6 +1573,11 @@ main :: proc() {
     config.memory_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.memory_font_size, nil, 0)
     config.top_bar_shortcut_hint_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.top_bar_shortcut_hint_font_size, nil, 0)
 
+    save_and_go_out :: proc() {
+    	save()
+        run = false
+    }
+
     go_out :: proc() {
     	run = false
     }
@@ -1537,13 +1585,9 @@ main :: proc() {
     for run {
         ray.BeginDrawing()
 
-        f :: proc() {
-        	fmt.println("Hello world!")
-        }
-
         if ray.WindowShouldClose() {
         	if unsaved {
-				open_yes_or_no_popup("There is unsaved things. Want to save?", save, go_out)
+				open_yes_or_no_popup("There is unsaved things. Want to save?", save_and_go_out, go_out)
 			} else {
 				run = false
 			}
@@ -1568,7 +1612,7 @@ main :: proc() {
 
         draw_editor()
         draw_top_bar_and_handle_shortcuts()
-        draw_memory()
+        draw_cpu()
         draw_status(i32(err_qnt))
         draw_video_buffer()
         draw_dialog_if_exists()
