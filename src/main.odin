@@ -90,6 +90,7 @@ has_errs         := false
 err_qnt          := 0
 execution_status := ExecutionStatus.Editing
 editor_y_offset: i32
+video_buffer_texture: ray.Texture2D
 
 unsaved := false
 have_editing_path := false
@@ -1074,23 +1075,10 @@ draw_cpu :: proc() {
 	}
 
 	{
-		pisc_color_to_rbg :: proc(pisc_color: u16) -> (rgb: ray.Color) {
-			rgb.r = u8(((pisc_color       & 0b00000000_00011111) * 255) / 31)
-			rgb.g = u8(((pisc_color >> 5  & 0b00000000_00011111) * 255) / 31)
-			rgb.b = u8(((pisc_color >> 10 & 0b00000000_00011111) * 255) / 31) 
-			rgb.a = 255
-			return
-		}
+		x = window_width - cpu_view_area_width
+		y = cpu_view_line_height + top_bar_height
 
-		offset_y : i32 = cpu_view_line_height + top_bar_height
-		offset_x : i32 = window_width - cpu_view_area_width
-
-		for y = 0; y < GPU_BUFFER_H; y += 1 {
-			for x = 0; x < GPU_BUFFER_W; x += 1 {
-				pisc_color := main_cpu.gpu.buffer[y*GPU_BUFFER_W + x]
-				ray.DrawPixel(offset_x + x, y + offset_y, pisc_color_to_rbg(pisc_color));
-			}
-		}
+		ray.DrawTexture(video_buffer_texture, x, y, ray.WHITE)
 	}
 
 	draw_border(screen_init_x, screen_init_y, ram_init_x - 4, call_s_init_y - 2)
@@ -1597,6 +1585,9 @@ main :: proc() {
 
     //toggle_fullscreen()
 
+    init_gpu(&main_cpu.gpu) //TODO: maybe you must to put this in another places, like in open
+	video_buffer_texture = ray.LoadTextureFromImage(main_cpu.gpu.buffer)
+
     config.primary_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.primary_font_size, nil, 0) 
     config.secondary_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.secondary_font_size, nil, 0)
     config.shortcut_hint_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.shortcut_hint_font_size, nil, 0)
@@ -1652,6 +1643,7 @@ main :: proc() {
 
 	        if execution_status == .Running {
 				for i := 0; !cpu_clock(&main_cpu); i += 1 {}
+				ray.UpdateTexture(video_buffer_texture, main_cpu.gpu.buffer.data)
 			}
 		} else {
 			draw_yes_or_no_popup()

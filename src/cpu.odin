@@ -1,6 +1,7 @@
 package pisc
 
 import "core:fmt"
+import ray "vendor:raylib"
 
 Gamepad_Entries :: enum u16 {
 	Up             = 1,
@@ -179,12 +180,18 @@ cpu_reset :: proc(using cpu: ^CPU) {
 
 	sl_clear(&call_stack)
 
-	for i := 0; i < GPU_BUFFER_H * GPU_BUFFER_W; i += 1 {
-		main_cpu.gpu.buffer[i] = 0
-	}
+	init_gpu(&cpu.gpu)
 }
 
 cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
+	pisc_color_to_rbg :: proc(pisc_color: u16) -> (rgb: ray.Color) {
+		rgb.r = u8(((pisc_color       & 0b00000000_00011111) * 255) / 31)
+		rgb.g = u8(((pisc_color >> 5  & 0b00000000_00011111) * 255) / 31)
+		rgb.b = u8(((pisc_color >> 10 & 0b00000000_00011111) * 255) / 31) 
+		rgb.a = 255
+		return
+	}
+
 	if u32(pc) >= instructions.len do return
 
 //fmt.println("pc = ", pc)
@@ -239,17 +246,18 @@ cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
 		cmp_flag = reg_table[inst.p0] == b
 
 	case .Vpoke:
-		x := int(reg_table[int(Register_Type.x)])
-		y := int(reg_table[int(Register_Type.y)])
-//	fmt.println("x = ", x)
-//	fmt.println("y = ", y)	
-		addr  := x + y * GPU_BUFFER_W
-		value := transmute(u16)(reg_table[inst.p0])
-		if addr >= 0 && addr < len(gpu.buffer) do gpu.buffer[addr] = value
+		x    := i32(reg_table[int(Register_Type.x)])
+		y    := i32(reg_table[int(Register_Type.y)])	
+
+		if x >= 0 && x < GPU_BUFFER_W && y >= 0 && y < GPU_BUFFER_H {
+			color_pisc := transmute(u16)(reg_table[inst.p0])
+			color_rgb  := pisc_color_to_rbg(color_pisc)
+			ray.ImageDrawPixel(&cpu.gpu.buffer, x, y, color_rgb)
+		}
 
 	case .Vpeek:
-		addr := reg_table[inst.p1] + inst.p2
-		reg_table[inst.p0] = transmute(i16)(gpu.buffer[addr])
+		//addr := reg_table[inst.p1] + inst.p2
+		//reg_table[inst.p0] = transmute(i16)(gpu.buffer[addr])
 
 	case .Mpeekx:
 
