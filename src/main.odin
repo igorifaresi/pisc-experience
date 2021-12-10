@@ -34,6 +34,7 @@ Config :: struct {
 	popup_background_alpha:          u8,
 	line_color:                      ray.Color,
 	cpu_view_area_width: i32,
+	cpu_view_line_height: i32,
 	box_gap: i32,
 }
 
@@ -80,6 +81,7 @@ config := Config{
 	popup_background_alpha=196,
 	line_color=ray.Color{200, 200, 200, 48},
 	cpu_view_area_width=730,
+	cpu_view_line_height=28,
 	box_gap=4,
 }
 cursor: Cursor
@@ -957,8 +959,8 @@ draw_cpu :: proc() {
 		return (config.window_height - x) - 1 
 	}
 
-	reg_init_x : i32 =  window_width  - cpu_view_area_width
-	reg_init_y : i32 = (window_height - 28*4) - 28 + 16
+	reg_init_x : i32 = window_width  - cpu_view_area_width
+	reg_init_y : i32 = window_height - cpu_view_line_height * 4 - secondary_font_size
 	x := reg_init_x
 	y := reg_init_y - 8
 	space_between_cols := cpu_view_area_width / 8
@@ -966,7 +968,7 @@ draw_cpu :: proc() {
 	draw_text("REGISTERS", x, reg_init_y, secondary_font_size, ray.LIGHTGRAY)
 	for name, reg in registers_table {
 		if i%8 == 0 { 
-			y += 28
+			y += cpu_view_line_height
 			x = window_width - cpu_view_area_width - space_between_cols
 		}
 
@@ -985,28 +987,27 @@ draw_cpu :: proc() {
 
 	draw_border(reg_init_x, reg_init_y, window_width + 3, window_height + 3)
 	
-	ram_init_x : i32 = window_width - 80*3
+	ram_init_x : i32 = window_width - cpu_view_area_width + GPU_BUFFER_W + box_gap + 8
 	ram_init_y : i32 = top_bar_height + 4
 	x = ram_init_x
 	y = ram_init_y - 8
-	//space_between_cols = 
+	space_between_cols = (window_width - ram_init_x) / 5
 	i = 0
 	draw_text("RAM", x, ram_init_y, secondary_font_size, ray.LIGHTGRAY)
 
-	regs_len := window_height - 28*5
 	for b := 0; b < len(main_cpu.mem); b += 1 {
 		if i%4 == 0 { 
-			y += 28
-			if y >= regs_len do break
+			y += cpu_view_line_height
+			if y >= (reg_init_y - secondary_font_size - box_gap - 3) do break
 
-			x = window_width - 80*3
+			x = ram_init_x
 
 			draw_text(ray.TextFormat("%d", i), x, y, secondary_font_size, highlight_color)
-			x += 48
+			x += space_between_cols
 		}
 
 		draw_text(ray.TextFormat("%x", main_cpu.mem[b]), x, y, secondary_font_size, secondary_font_color)
-		x += 46
+		x += space_between_cols
 
 		i += 1
 	}
@@ -1014,7 +1015,7 @@ draw_cpu :: proc() {
 	draw_border(ram_init_x, ram_init_y, window_width + 3, reg_init_y - 2)
 
 	call_s_init_x : i32 = window_width  - cpu_view_area_width
-	call_s_init_y : i32 = GPU_BUFFER_H + 32 + top_bar_height + 8
+	call_s_init_y : i32 = GPU_BUFFER_H + 32 + top_bar_height + 6
 	x = call_s_init_x
 	y = call_s_init_y - 8
 	i = 0
@@ -1025,7 +1026,7 @@ draw_cpu :: proc() {
 			//TODO
 		}
 	} else {
-		draw_text("EMPTY CALL STACK", x, y + 8 + 28, secondary_font_size, ray.GRAY)
+		draw_text("EMPTY CALL STACK", x, y + 8 + cpu_view_line_height, secondary_font_size, ray.GRAY)
 	}
 
 	draw_border(call_s_init_x, call_s_init_y, ram_init_x - 4, reg_init_y - 2)
@@ -1081,8 +1082,8 @@ draw_cpu :: proc() {
 			return
 		}
 
-		offset_y : i32 = 31 + top_bar_height
-		offset_x : i32 = window_width  - cpu_view_area_width - 1
+		offset_y : i32 = cpu_view_line_height + top_bar_height
+		offset_x : i32 = window_width - cpu_view_area_width
 
 		for y = 0; y < GPU_BUFFER_H; y += 1 {
 			for x = 0; x < GPU_BUFFER_W; x += 1 {
@@ -1210,7 +1211,16 @@ draw_editor :: proc() {
 
 		if execution_status == .Waiting && u16(i_ins) == main_cpu.pc {
 			lerp_cursor(y)
-			ray.DrawRectangle(0, y, highlight_line_width, primary_font_size, line_highlight_color)
+			
+			first_part_width := highlight_line_width - 150
+			second_part_width := highlight_line_width - first_part_width
+
+			ray.DrawRectangle(0, y, first_part_width, primary_font_size, line_highlight_color)
+
+			c := line_highlight_color
+			c.a = 212
+			ray.DrawRectangleGradientH(first_part_width, y, second_part_width, primary_font_size,
+				line_highlight_color, background_color) 
 		}
 
 		draw_text(ray.TextFormat("%d", i_ins), line_number_x, y, primary_font_size, ray.GRAY)
