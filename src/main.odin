@@ -38,12 +38,19 @@ Config :: struct {
 	box_gap: i32,
 }
 
+Cursor_Place :: enum {
+	Label,
+	Ins,
+	Comment,
+}
+
 Cursor :: struct {
 	ins:      u32,
 	param:    u32,
 	char:     u32,
 	label:    u32,
 	in_label: bool,
+	place:    Cursor_Place,
 }
 
 BufferStatus :: enum {
@@ -323,6 +330,11 @@ lookup_label :: proc(label: u32) -> cstring {
 	return strings.clone_to_cstring(string(tmp))
 }
 
+lookup_comment :: proc(comment: u32) -> cstring {
+	tmp := sl_slice(&main_cpu.comments.data[comment].content)
+	return strings.clone_to_cstring(string(tmp))
+}
+
 set_buffer :: proc(i_ins: u32, i_param: u32, str: string) {
 	idx := i_ins * 4 + i_param
 	char_buffer := &main_cpu.editing_buffers.data[idx]
@@ -345,6 +357,17 @@ push_label :: proc(str: string, line: u16) {
 	label.line = line
 
 	sl_push(&main_cpu.labels, label)
+}
+
+push_comment :: proc(str: string, line: u16) {
+	comment: Comment
+	
+	for i := 0; i < len(str); i += 1 {
+		sl_push(&comment.content, str[i])
+	}
+	comment.line = line
+
+	sl_push(&main_cpu.comments, comment)
 }
 
 open_yes_or_no_popup :: proc(text: cstring, callback: proc(), refuse_callback: proc()) {
@@ -1197,6 +1220,28 @@ draw_editor :: proc() {
 			}
 		}
 
+		first_comment := true
+
+		comments := sl_slice(&main_cpu.comments)
+		for i := 0; i < len(comments); i += 1 {
+			comment := &comments[i]
+
+			if comment.line == u16(i_ins) {
+				cstr := lookup_comment(u32(i))
+				c := ray.GRAY
+
+				if first_comment {
+					y += editor_label_y_offset / 2
+					first_comment = false
+				}
+
+				draw_text(ray.TextFormat("# %s", cstr), 
+					editor_label_x_offset, y, primary_font_size, c)
+
+				y += editor_line_height
+			}
+		}
+
 		if execution_status == .Waiting && u16(i_ins) == main_cpu.pc {
 			lerp_cursor(y)
 			
@@ -1508,9 +1553,13 @@ process_editor_input :: proc() {
 	for key > 0 {
 	    if key >= 32 && key <= 125 && char_buffer.len < 16 {
 	    	if !(key == ' ' && cursor.param < 3) {
-	    		sl_insert(char_buffer, byte(key), cursor.char)
-	    		cursor.char += 1
-	    		unsaved = true
+	    		if key != '#' {
+	    			sl_insert(char_buffer, byte(key), cursor.char)
+	    			cursor.char += 1
+	    			unsaved = true
+	    		} else {
+	    			push_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins))
+	    		}
 			} else {
 				cursor.param += 1
 				update_char_cursor()

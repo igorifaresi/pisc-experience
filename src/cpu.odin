@@ -149,6 +149,11 @@ Label :: struct {
 	line: u16,
 }
 
+Comment :: struct {
+	content: Static_List(byte, 64),
+	line: u16,
+}
+
 MAX_INSTRUCTIONS :: 1024 * 16
 
 CPU :: struct {
@@ -160,6 +165,7 @@ CPU :: struct {
 	instructions: Static_List(Instruction, MAX_INSTRUCTIONS),
 	editing_buffers: Static_List(Static_List(byte, 16), MAX_INSTRUCTIONS * 4),
 	labels: Static_List(Label, 4096),
+	comments: Static_List(Comment, 4096),
 	mem: [1024 * 64]byte,
 
 	cmp_flag: bool,
@@ -246,8 +252,8 @@ cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
 		cmp_flag = reg_table[inst.p0] == b
 
 	case .Vpoke:
-		x    := i32(reg_table[int(Register_Type.x)])
-		y    := i32(reg_table[int(Register_Type.y)])	
+		x := i32(reg_table[int(Register_Type.x)])
+		y := i32(reg_table[int(Register_Type.y)])	
 
 		if x >= 0 && x < GPU_BUFFER_W && y >= 0 && y < GPU_BUFFER_H {
 			color_pisc := transmute(u16)(reg_table[inst.p0])
