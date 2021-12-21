@@ -3,7 +3,6 @@ package sfd
 import "core:c"
 import "core:os"
 
-//TODO: insert windows version
 when os.OS == "linux" do foreign import sfd "libsfd.a"
 when os.OS == "windows" {
 	foreign import sfd {
