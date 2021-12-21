@@ -1314,15 +1314,15 @@ set_gamepad_flags :: proc() {
 
 process_editor_input :: proc() {
 	update_char_cursor :: proc() {
+		cstr: cstring
 		length: u32
 
-		if cursor.place == .Ins {
- 			cstr   := lookup_buffer(cursor.ins, cursor.param)
-			length = u32(len(cstr))
-		} else {
-			cstr   := lookup_label(cursor.label)
-			length = u32(len(cstr))
+		switch cursor.place {
+ 		case .Ins:     cstr = lookup_buffer(cursor.ins, cursor.param)
+		case .Label:   cstr = lookup_label(cursor.label)
+		case .Comment: cstr = lookup_comment(cursor.comment)
 		}
+		length = u32(len(cstr))
 
 		if cursor.char >= length do cursor.char = length		
 	}
@@ -1393,7 +1393,7 @@ process_editor_input :: proc() {
 			line := main_cpu.comments.data[cursor.comment].line
 
 			labels := sl_slice(&main_cpu.labels)
-			for i := 0; i < len(labels); i += 1 {
+			for i := 0; i < len(labels); i += 1 { //len(labels) in wrong!!! TODO
 				label := &labels[i]
 
 				for label.line == line {
@@ -1442,17 +1442,34 @@ process_editor_input :: proc() {
 			}
 		}
 		update_char_cursor()
-/*
-		cursor_y := get_cursor_y_offset()
-	fmt.println("cursor_y = ", cursor_y)
-	
-		if cursor_y < (config.editor_line_height * 2) {
-			editor_y_offset = (config.editor_line_height * 2) - cursor_y
-		}*/
 	}
 
 	move_down :: proc() {
-		if cursor.place == .Ins {
+		search_comment_above_comment :: proc() -> bool {
+			actual_comment := &main_cpu.comments.data[cursor.comment]
+
+			if cursor.comment == 0 do return false
+
+			length := main_cpu.comments.len
+
+			fmt.println("comments qnt = ", length)
+
+			for i := int(cursor.comment + 1); i < int(length); i += 1 {
+				it := &main_cpu.comments.data[i]
+
+				if it.line == actual_comment.line {
+					cursor.comment = u32(i)
+					return true
+				} else {
+					break
+				}
+			}
+
+			return false
+		}
+
+		switch cursor.place {
+		case .Ins:
 			cursor.ins += 1
 
 			found_label := false
@@ -1473,7 +1490,7 @@ process_editor_input :: proc() {
 			} else {
 				cursor.place = .Label
 			}
-		} else {
+		case .Label:
 			has_label_below := false
 			actual_label    := &main_cpu.labels.data[cursor.label]
 
@@ -1489,15 +1506,11 @@ process_editor_input :: proc() {
 				cursor.ins   = u32(actual_label.line)
 				cursor.place = .Ins
 			}
+		case .Comment:
+			fmt.println(cursor)
+			if !search_comment_above_comment() {}
 		}
-		update_char_cursor()	
-/*
-		cursor_y := get_cursor_y_offset()
-	fmt.println("cursor_y = ", cursor_y)
-	
-		if cursor_y > (config.window_height - config.editor_line_height * 2) {
-			editor_y_offset = -(cursor_y - (config.window_height - config.editor_line_height * 2)) 
-		}*/
+		update_char_cursor()
 	}
 
 	add_line :: proc() {
@@ -1599,7 +1612,8 @@ process_editor_input :: proc() {
 		if right {
 			cursor.char += 1
 
-			if cursor.place == .Ins {
+			switch cursor.place {
+			case .Ins:
 	 			cstr      := lookup_buffer(cursor.ins, cursor.param)
 				length    := u32(len(cstr))
 				if cursor.char > length {
@@ -1610,8 +1624,14 @@ process_editor_input :: proc() {
 						cursor.char = length
 					}
 				}
-			} else {
+			case .Label:
 				cstr   := lookup_label(cursor.label)
+				length := u32(len(cstr))
+				if cursor.char > length {
+					cursor.char = length
+				}
+			case .Comment:
+				cstr   := lookup_comment(cursor.comment)
 				length := u32(len(cstr))
 				if cursor.char > length {
 					cursor.char = length
