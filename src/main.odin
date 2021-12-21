@@ -1253,7 +1253,7 @@ draw_editor :: proc() {
 
 				draw_text(fmt_cstr, editor_label_x_offset, y, primary_font_size, c)
 
-				//never gonna give you up
+				//never gonna give you up, never gonna let you down
 
 				if cursor.place == .Comment && cursor.comment == u32(i) {
 					draw_cursor_comment(editor_label_x_offset, y, fmt_cstr)
