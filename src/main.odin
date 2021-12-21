@@ -1154,6 +1154,15 @@ draw_editor :: proc() {
 		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
 	}
 
+	draw_cursor_comment :: proc(x, y: i32, cstr: cstring) {
+		lerp_cursor(y)
+
+		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char + 2])
+		cursor_offset := i32(ray.MeasureTextEx(config.primary_font, first_half, f32(config.primary_font_size), 1.0).x)
+		cursor_x      := x + cursor_offset
+		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
+	}
+
 	draw_err_indication :: proc(x: i32, y: i32, cstr: cstring) {
 		word_size := i32(ray.MeasureTextEx(config.primary_font, cstr, f32(config.primary_font_size), 1.0).x)
 		tmp_y := y + config.primary_font_size
@@ -1240,8 +1249,13 @@ draw_editor :: proc() {
 					first_comment = false
 				}
 
-				draw_text(ray.TextFormat("# %s", cstr), 
-					editor_label_x_offset, y, primary_font_size, c)
+				fmt_cstr := ray.TextFormat("# %s", cstr)
+
+				draw_text(fmt_cstr, editor_label_x_offset, y, primary_font_size, c)
+
+				if cursor.place == .Comment && cursor.comment == u32(i) {
+					draw_cursor_comment(editor_label_x_offset, y, fmt_cstr)
+				}
 
 				y += editor_line_height
 			}
@@ -1365,10 +1379,34 @@ process_editor_input :: proc() {
 				if it.line == actual_comment.line {
 					cursor.comment = u32(i)
 					return true
+				} else {
+					break
 				}
 			}
 
 			return false
+		}
+
+		search_label_above_comment :: proc() -> (found_label := false) {
+			line := main_cpu.comments.data[cursor.comment].line
+
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				label := &labels[i]
+
+				for label.line == line {
+					found_label  = true
+					cursor.label = u32(i)
+					i += 1
+					if i < len(labels) { label = &labels[i] } else { break }
+				}
+
+				if found_label {
+					cursor.place = .Label
+					break
+				}
+			}
+			return
 		}
 
 		switch cursor.place {
@@ -1393,7 +1431,13 @@ process_editor_input :: proc() {
 				cursor.place = .Ins
 			}
 		case .Comment:
-			search_comment_above_comment()
+			if !search_comment_above_comment() && !search_label_above_comment() {
+				ins := main_cpu.comments.data[cursor.comment].line
+				if ins > 0 {
+					cursor.ins   = u32(ins - 1)
+					cursor.place = .Ins
+				}
+			}
 		}
 		update_char_cursor()
 /*
