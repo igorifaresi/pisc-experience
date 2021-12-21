@@ -5,6 +5,12 @@ import "core:os"
 
 //TODO: insert windows version
 when os.OS == "linux" do foreign import sfd "libsfd.a"
+when os.OS == "windows" {
+	foreign import sfd {
+		"sfd.lib",
+		"system:comdlg32.lib",
+	}
+}
 
 SFD_VERSION :: "0.1.0"
 
