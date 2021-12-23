@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:strconv"
 import "core:strings"
 import "core:math"
+import "core:os"
 import "sfd"
 import ray "vendor:raylib"
 
@@ -797,7 +798,17 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		save_and_clean :: proc() {
 			save()
 			clean()
-		}	
+		}
+
+		extract_filename :: proc(str: string) {
+			when os.OS == "windows" {
+				tmp := strings.split(str, "\\")
+				editing_file_name = tmp[len(tmp) - 1]
+			} else {
+				tmp := strings.split(str, "/")
+				editing_file_name = tmp[len(tmp) - 1]
+			}
+		}
 
 		if btn_state[NEW_BTN] == .Clicked || (ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyPressed(.N)) {
 			if unsaved {
@@ -815,8 +826,7 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 			}
 
 			editing_path = sfd.open_dialog(&opt)
-			tmp := strings.split(string(editing_path), "/")
-			editing_file_name = tmp[len(tmp) - 1]
+			extract_filename(string(editing_path))
 			have_editing_path = true
 
 			load_cpu_from_file(&main_cpu, editing_path)
@@ -832,8 +842,7 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 				extension="",
 			}
 			editing_path = sfd.save_dialog(&opt)
-			tmp := strings.split(string(editing_path), "/")
-			editing_file_name = tmp[len(tmp) - 1]
+			extract_filename(string(editing_path))
 			have_editing_path = true
 
 			dump_cpu_to_file(&main_cpu, editing_path)
@@ -1216,13 +1225,13 @@ draw_editor :: proc() {
 			if label.line == u16(i_ins) {
 				cstr := lookup_label(u32(i))
 				c := config.primary_font_color
-				if cursor.place == .Label && cursor.label == u32(i) do c = ray.YELLOW
+				if execution_status == .Editing && cursor.place == .Label && cursor.label == u32(i) do c = ray.YELLOW
 
 				y += editor_label_y_offset
 				draw_text(ray.TextFormat("%s:", cstr), 
 					editor_label_x_offset, y, primary_font_size, c)
 
-				if cursor.place == .Label && cursor.label == u32(i) {
+				if execution_status == .Editing && cursor.place == .Label && cursor.label == u32(i) {
 					draw_cursor_label(editor_label_x_offset, y, cstr)
 				}
 				y += editor_line_height
@@ -1239,7 +1248,7 @@ draw_editor :: proc() {
 				cstr := lookup_comment(u32(i))
 				c := ray.GRAY
 
-				if cursor.place == .Comment && cursor.comment == u32(i) {
+				if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
 					c   = ray.YELLOW
 					c.a = 96
 				}
@@ -1255,7 +1264,7 @@ draw_editor :: proc() {
 
 				//never gonna give you up, never gonna let you down
 
-				if cursor.place == .Comment && cursor.comment == u32(i) {
+				if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
 					draw_cursor_comment(editor_label_x_offset, y, fmt_cstr)
 				}
 
@@ -1445,14 +1454,68 @@ process_editor_input :: proc() {
 	}
 
 	move_down :: proc() {
-		search_comment_above_comment :: proc() -> bool {
-			actual_comment := &main_cpu.comments.data[cursor.comment]
+		search_label_below_ins :: proc() -> (found_label := false) {
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				if labels[i].line == u16(cursor.ins + 1) {
+					found_label  = true
+					cursor.label = u32(i)
+					cursor.place = .Label
+					break
+				}
+			}
+			return
+		}
 
-			if cursor.comment == 0 do return false
+		search_comment_below_ins :: proc() -> (found_comment := false) {
+			comments := sl_slice(&main_cpu.comments)
+			for i := 0; i < len(comments); i += 1 {
+				if comments[i].line == u16(cursor.ins + 1) {
+					found_comment  = true
+					cursor.comment = u32(i)
+					cursor.place = .Comment
+					break
+				}
+			}
+			return
+		}
+
+		search_label_below_label :: proc() -> (found_label := false) {
+			if cursor.label < (main_cpu.labels.len - 1) {
+				below_label  := &main_cpu.labels.data[cursor.label + 1]
+				if main_cpu.labels.data[cursor.label].line == below_label.line {
+					cursor.label += 1
+					cursor.place = .Label
+					found_label = true
+				}
+			}
+			return
+		}
+
+		search_comment_below_label :: proc() -> bool {
+			line :=  main_cpu.labels.data[cursor.label].line
 
 			length := main_cpu.comments.len
 
-			fmt.println("comments qnt = ", length)
+			for i := 0; i < int(length); i += 1 {
+				it := &main_cpu.comments.data[i]
+
+				if it.line == line {
+					cursor.comment = u32(i)
+					cursor.place   = .Comment
+					return true
+				} else {
+					break
+				}
+			}
+
+			return false
+		}
+
+		search_comment_below_comment :: proc() -> bool {
+			actual_comment := &main_cpu.comments.data[cursor.comment]
+
+			length := main_cpu.comments.len
 
 			for i := int(cursor.comment + 1); i < int(length); i += 1 {
 				it := &main_cpu.comments.data[i]
@@ -1470,45 +1533,24 @@ process_editor_input :: proc() {
 
 		switch cursor.place {
 		case .Ins:
-			cursor.ins += 1
-
-			found_label := false
-
-			labels := sl_slice(&main_cpu.labels)
-			for i := 0; i < len(labels); i += 1 {
-				label := &labels[i]
-
-				if label.line == u16(cursor.ins) {
-					found_label  = true
-					cursor.label = u32(i)
-					break
-				}
-			}
-
-			if !found_label {
-				if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins -= 1
-			} else {
-				cursor.place = .Label
+			if !search_comment_below_ins() && !search_label_below_ins() {
+				length := main_cpu.editing_buffers.len / 4
+				if cursor.ins < length - 1 do cursor.ins += 1
 			}
 		case .Label:
-			has_label_below := false
-			actual_label    := &main_cpu.labels.data[cursor.label]
-
-			if cursor.label < (main_cpu.labels.len - 1) {
-				below_label  := &main_cpu.labels.data[cursor.label + 1]
-				if actual_label.line == below_label.line {
-					cursor.label += 1
-					has_label_below = true
+			if !search_label_below_label() && !search_comment_below_label() {
+				actual_label := &main_cpu.labels.data[cursor.label]
+				if u32(actual_label.line) < (main_cpu.editing_buffers.len/4) {
+					cursor.ins   = u32(actual_label.line)
+					cursor.place = .Ins
 				}
 			}
-
-			if !has_label_below && u32(actual_label.line) < (main_cpu.editing_buffers.len/4) {
-				cursor.ins   = u32(actual_label.line)
+		case .Comment:
+			if !search_comment_below_comment() {
+				ins := main_cpu.comments.data[cursor.comment].line
+				cursor.ins   = u32(ins)
 				cursor.place = .Ins
 			}
-		case .Comment:
-			fmt.println(cursor)
-			if !search_comment_above_comment() {}
 		}
 		update_char_cursor()
 	}
@@ -1645,15 +1687,24 @@ process_editor_input :: proc() {
 	if ray.IsKeyPressed(.DELETE) do delete_line()
 
 	char_buffer: ^Static_List(byte, 16)
-	if cursor.place == .Ins {
+	char_buffer_comment: ^Static_List(byte, 64)
+
+	switch cursor.place {
+	case .Ins:
 		char_buffer = &main_cpu.editing_buffers.data[cursor.ins * 4 + cursor.param]
-	} else {
+	case .Label:
 		char_buffer = &main_cpu.labels.data[cursor.label].name
+	case .Comment:
+		char_buffer_comment = &main_cpu.comments.data[cursor.comment].content
 	}
 
 	if ray.IsKeyPressed(.BACKSPACE) {
 		if cursor.char > 0 {
-			sl_remove(char_buffer, cursor.char - 1)
+			if cursor.place != .Comment {
+				sl_remove(char_buffer, cursor.char - 1)
+			} else {
+				sl_remove(char_buffer_comment, cursor.char - 1)
+			}
 			cursor.char -= 1
 			unsaved = true
 		} else if cursor.param > 0 {
@@ -1668,7 +1719,11 @@ process_editor_input :: proc() {
 	    if key >= 32 && key <= 125 && char_buffer.len < 16 {
 	    	if !(key == ' ' && cursor.param < 3) {
 	    		if key != '#' {
-	    			sl_insert(char_buffer, byte(key), cursor.char)
+	    			if cursor.place != .Comment {
+	    				sl_insert(char_buffer, byte(key), cursor.char)
+	    			} else {
+	    				sl_insert(char_buffer_comment, byte(key), cursor.char)	    				
+	    			}
 	    			cursor.char += 1
 	    			unsaved = true
 	    		} else {
