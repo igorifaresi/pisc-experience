@@ -15,6 +15,7 @@ Config :: struct {
 	top_bar_height:                  i32,
 	shortcut_hint_font:      ray.Font,
 	shortcut_hint_font_size: i32,
+	shortcut_hint_char_width: i32,
 	primary_font_size:                i32,
 	editor_line_height:              i32,
 	editor_top_padding:              i32,
@@ -22,13 +23,15 @@ Config :: struct {
 	editor_mnemonic_left_margin:     i32,
 	editor_param_left_margin:        i32,
 	primary_font:                     ray.Font,
+	primary_font_char_width:          i32,
 	editor_label_y_offset:           i32,
 	editor_label_x_offset:           i32,
 	line_highlight_color:     ray.Color,
 	error_color:                    ray.Color,
 	primary_font_color:               ray.Color,
 	secondary_font:                     ray.Font,
-	secondary_font_size:                i32, 
+	secondary_font_size:                i32,
+	secondary_font_char_width:          i32, 
 	highlight_color:         ray.Color,
 	secondary_font_color:         ray.Color,
 	gamepad_input_table:             Input_Table,
@@ -1173,7 +1176,7 @@ draw_editor :: proc() {
 	}
 
 	draw_err_indication :: proc(x: i32, y: i32, cstr: cstring) {
-		word_size := i32(ray.MeasureTextEx(config.primary_font, cstr, f32(config.primary_font_size), 1.0).x)
+		word_size := i32(ray.MeasureTextEx(config.primary_font, cstr, f32(config.primary_font_size), 1.0).x) //todo: replace this
 		tmp_y := y + config.primary_font_size
 		ray.DrawLine(x, tmp_y, x + word_size, tmp_y, config.error_color)
 	}
@@ -1259,6 +1262,10 @@ draw_editor :: proc() {
 				}
 
 				fmt_cstr := ray.TextFormat("# %s", cstr)
+
+				if (i32(len(fmt_cstr) + 1) * (primary_font_char_width + 1)) > (window_width - cpu_view_area_width) {
+					c = ray.RED
+				}
 
 				draw_text(fmt_cstr, editor_label_x_offset, y, primary_font_size, c)
 
@@ -1588,7 +1595,8 @@ process_editor_input :: proc() {
 	}
 
 	delete_line :: proc() {
-		if cursor.place == .Ins {
+		switch cursor.place {
+		case .Ins:
 			idx := u32(cursor.ins)*4
 			sl_remove(&main_cpu.editing_buffers, idx)
 			sl_remove(&main_cpu.editing_buffers, idx)
@@ -1605,10 +1613,12 @@ process_editor_input :: proc() {
 			}
 
 			if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
-		} else {
+		case .Label:
 			cursor.ins   = u32(main_cpu.labels.data[cursor.label].line)
 			cursor.place = .Ins
 			sl_remove(&main_cpu.labels, u32(cursor.label))
+		case .Comment:
+			// TODO
 		}
 		unsaved = true
 	}
@@ -1716,22 +1726,28 @@ process_editor_input :: proc() {
 	key := ray.GetCharPressed()
 
 	for key > 0 {
-	    if key >= 32 && key <= 125 && char_buffer.len < 16 {
-	    	if !(key == ' ' && cursor.param < 3) {
-	    		if key != '#' {
-	    			if cursor.place != .Comment {
-	    				sl_insert(char_buffer, byte(key), cursor.char)
-	    			} else {
-	    				sl_insert(char_buffer_comment, byte(key), cursor.char)	    				
-	    			}
+	    if key >= 32 && key <= 125 {
+	    	if cursor.place != .Comment && char_buffer.len < 16 {
+		    	if !(key == ' ' && cursor.param < 3) { //TODO
+		    		if key != '#' {
+		    			sl_insert(char_buffer, byte(key), cursor.char)
+		    			cursor.char += 1
+		    			unsaved = true
+		    		} else {
+		    			push_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins))
+		    		}
+				} else {
+					cursor.param += 1
+					update_char_cursor()
+				}
+			} else if char_buffer_comment.len < 64 {
+				if key != '#' {
+	    			sl_insert(char_buffer_comment, byte(key), cursor.char)	    				
 	    			cursor.char += 1
 	    			unsaved = true
 	    		} else {
 	    			push_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins))
 	    		}
-			} else {
-				cursor.param += 1
-				update_char_cursor()
 			}
 	    	
 	    }
@@ -1809,6 +1825,13 @@ main :: proc() {
     config.primary_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.primary_font_size, nil, 0) 
     config.secondary_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.secondary_font_size, nil, 0)
     config.shortcut_hint_font = ray.LoadFontEx("assets/Inconsolata-Regular.ttf", config.shortcut_hint_font_size, nil, 0)
+
+    config.primary_font_char_width = i32(
+    	ray.MeasureTextEx(config.primary_font, " ", f32(config.primary_font_size), 1.0).x)
+    config.secondary_font_char_width = i32(
+    	ray.MeasureTextEx(config.secondary_font, " ", f32(config.secondary_font_size), 1.0).x)
+    config.shortcut_hint_char_width = i32(
+    	ray.MeasureTextEx(config.shortcut_hint_font, " ", f32(config.shortcut_hint_font_size), 1.0).x)
 
     save_and_go_out :: proc() {
     	save()
