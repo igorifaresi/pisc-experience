@@ -339,6 +339,15 @@ lookup_comment :: proc(comment: u32) -> cstring {
 	return strings.clone_to_cstring(string(tmp))
 }
 
+lookup_comment_str :: proc(comment: u32) -> string {
+	tmp := sl_slice(&main_cpu.comments.data[comment].content)
+	return string(tmp)
+}
+
+to_cstr :: proc(str: string) -> cstring {
+	return strings.clone_to_cstring(str)
+}
+
 set_buffer :: proc(i_ins: u32, i_param: u32, str: string) {
 	idx := i_ins * 4 + i_param
 	char_buffer := &main_cpu.editing_buffers.data[idx]
@@ -1166,11 +1175,10 @@ draw_editor :: proc() {
 		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
 	}
 
-	draw_cursor_comment :: proc(x, y: i32, cstr: cstring) {
+	draw_cursor_comment :: proc(x, y, char_qnt: i32) {
 		lerp_cursor(y)
 
-		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char + 2])
-		cursor_offset := i32(ray.MeasureTextEx(config.primary_font, first_half, f32(config.primary_font_size), 1.0).x)
+		cursor_offset := char_qnt * (primary_font_char_width + 1)
 		cursor_x      := x + cursor_offset
 		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
 	}
@@ -1248,7 +1256,6 @@ draw_editor :: proc() {
 			comment := &comments[i]
 
 			if comment.line == u16(i_ins) {
-				cstr := lookup_comment(u32(i))
 				c := ray.GRAY
 
 				if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
@@ -1261,21 +1268,60 @@ draw_editor :: proc() {
 					first_comment = false
 				}
 
-				fmt_cstr := ray.TextFormat("# %s", cstr)
+				str := lookup_comment_str(u32(i))
 
-				if (i32(len(fmt_cstr) + 1) * (primary_font_char_width + 1)) > (window_width - cpu_view_area_width) {
-					c = ray.RED
+				have_cursor       := execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) 
+				horizontal_offset := primary_font_char_width * 2 + 2 + editor_label_x_offset
+				max_line_char_qnt := (window_width - horizontal_offset - cpu_view_area_width) / (primary_font_char_width + 1)
+
+				fmt_cstr: cstring
+				p: i32
+			
+				for len(str) > 0 {
+					have_cursor_in_this_line: bool = ---
+					old_p := p
+
+					if (horizontal_offset + (i32(len(str)) * (primary_font_char_width + 1))) > (window_width - cpu_view_area_width) {
+						insersection_idx := max_line_char_qnt
+						for str[insersection_idx] != byte(' ') { insersection_idx -= 1 }
+						fmt_cstr = ray.TextFormat("# %s", to_cstr(str[:insersection_idx]))
+
+						if p != 0 {
+							have_cursor_in_this_line = have_cursor && i32(cursor.char) >  p && i32(cursor.char) <= (insersection_idx + p)
+						} else {
+							have_cursor_in_this_line = have_cursor && i32(cursor.char) >= p && i32(cursor.char) <= (insersection_idx + p)
+						}
+
+						p += insersection_idx
+						str = str[insersection_idx:]
+					} else {
+						fmt_cstr = ray.TextFormat("# %s", to_cstr(str))
+
+						insersection_idx := i32(len(str))
+
+						if p != 0 {
+							have_cursor_in_this_line = have_cursor && i32(cursor.char) >  p && i32(cursor.char) <= (insersection_idx + p)
+						} else {
+							have_cursor_in_this_line = have_cursor && i32(cursor.char) >= p && i32(cursor.char) <= (insersection_idx + p)
+						}
+
+						str = ""
+					}
+
+					draw_text(fmt_cstr, editor_label_x_offset, y, primary_font_size, c)
+
+					if have_cursor_in_this_line do draw_cursor_comment(horizontal_offset, y, i32(cursor.char) - old_p)
+
+					y += editor_line_height
 				}
-
-				draw_text(fmt_cstr, editor_label_x_offset, y, primary_font_size, c)
 
 				//never gonna give you up, never gonna let you down
 
-				if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
+				/*if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
 					draw_cursor_comment(editor_label_x_offset, y, fmt_cstr)
 				}
 
-				y += editor_line_height
+				y += editor_line_height*/
 			}
 		}
 
