@@ -52,8 +52,8 @@ sl_clear :: proc(list: ^Static_List($T, $S)) {
 sl_insert :: proc(list: ^Static_List($T, $S), value: T, pos: u32) {
     if int(list.len) >= len(list.data) do return
 
-    list.len += 1
     for i := list.len; i > pos; i -= 1 do list.data[i] = list.data[i - 1]
+    list.len += 1
     list.data[pos] = value
 }
 

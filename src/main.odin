@@ -121,6 +121,8 @@ popup_callback: proc()
 popup_refuse_callback: proc()
 popup_height: i32
 
+comment_buffer := make([]byte, 1024*1024)
+
 dummy_callback :: proc() {
 	fmt.println("Dummy callback")
 }
@@ -372,7 +374,7 @@ push_label :: proc(str: string, line: u16) {
 	sl_push(&main_cpu.labels, label)
 }
 
-push_comment :: proc(str: string, line: u16) {
+insert_comment :: proc(str: string, line: u16, pos: int) {
 	comment: Comment
 	
 	for i := 0; i < len(str); i += 1 {
@@ -380,7 +382,11 @@ push_comment :: proc(str: string, line: u16) {
 	}
 	comment.line = line
 
-	sl_push(&main_cpu.comments, comment)
+	if pos != -1 {
+		sl_insert(&main_cpu.comments, comment, u32(pos))
+	} else {
+		sl_push(&main_cpu.comments, comment)		
+	}
 }
 
 open_yes_or_no_popup :: proc(text: cstring, callback: proc(), refuse_callback: proc()) {
@@ -1268,6 +1274,12 @@ draw_editor :: proc() {
 					first_comment = false
 				}
 
+				/*{
+					length := len(tmp)
+					tmp    := lookup_comment_str(u32(i))
+					i :=
+					for 
+				}*/
 				str := lookup_comment_str(u32(i))
 
 				have_cursor       := execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) 
@@ -1773,27 +1785,37 @@ process_editor_input :: proc() {
 
 	for key > 0 {
 	    if key >= 32 && key <= 125 {
-	    	if cursor.place != .Comment && char_buffer.len < 16 {
-		    	if !(key == ' ' && cursor.param < 3) { //TODO
-		    		if key != '#' {
-		    			sl_insert(char_buffer, byte(key), cursor.char)
-		    			cursor.char += 1
-		    			unsaved = true
-		    		} else {
-		    			push_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins))
-		    		}
-				} else {
-					cursor.param += 1
-					update_char_cursor()
+	    	switch cursor.place {
+	    	case .Label, .Ins:
+				if char_buffer.len < 16 { 
+					if !(key == ' ' && cursor.param < 3) { //TODO
+						if key != '#' {
+							sl_insert(char_buffer, byte(key), cursor.char)
+							cursor.char += 1
+							unsaved = true
+						} else {
+							insert_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins), -1)
+						}
+					} else {
+						cursor.param += 1
+						update_char_cursor()
+					}
 				}
-			} else if char_buffer_comment.len < 64 {
-				if key != '#' {
-	    			sl_insert(char_buffer_comment, byte(key), cursor.char)	    				
-	    			cursor.char += 1
-	    			unsaved = true
-	    		} else {
-	    			push_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins))
-	    		}
+			case .Comment:
+				if char_buffer_comment.len < 64 {
+					if key != '#' {
+						sl_insert(char_buffer_comment, byte(key), cursor.char)	    				
+						cursor.char += 1
+						unsaved = true
+					} else {
+						insert_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins), -1)
+					}
+				} else {
+					main_cpu.comments.data[cursor.comment].have_next = true
+					cursor.comment += 1
+					insert_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins), int(cursor.comment))
+					cursor.char = 0
+				}
 			}
 	    	
 	    }

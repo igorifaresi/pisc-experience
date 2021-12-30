@@ -152,6 +152,7 @@ Label :: struct {
 Comment :: struct {
 	content: Static_List(byte, 64),
 	line: u16,
+	have_next: bool,
 }
 
 MAX_INSTRUCTIONS :: 1024 * 16
