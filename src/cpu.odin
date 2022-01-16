@@ -156,6 +156,7 @@ Comment :: struct {
 }
 
 MAX_INSTRUCTIONS :: 1024 * 16
+MAX_COMMENTS :: 4096
 
 CPU :: struct {
 	reg_table: [31]i16,
@@ -166,7 +167,7 @@ CPU :: struct {
 	instructions: Static_List(Instruction, MAX_INSTRUCTIONS),
 	editing_buffers: Static_List(Static_List(byte, 16), MAX_INSTRUCTIONS * 4),
 	labels: Static_List(Label, 4096),
-	comments: Static_List(Comment, 4096),
+	comments: Static_List(Comment, MAX_COMMENTS),
 	mem: [1024 * 64]byte,
 
 	cmp_flag: bool,

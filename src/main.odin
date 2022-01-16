@@ -374,7 +374,7 @@ push_label :: proc(str: string, line: u16) {
 	sl_push(&main_cpu.labels, label)
 }
 
-insert_comment :: proc(str: string, line: u16, pos: int) {
+insert_comment :: proc(str: string, line: u16, pos: int) -> (new_comment_idx: int) {
 	comment: Comment
 	
 	for i := 0; i < len(str); i += 1 {
@@ -387,6 +387,8 @@ insert_comment :: proc(str: string, line: u16, pos: int) {
 	} else {
 		sl_push(&main_cpu.comments, comment)		
 	}
+
+	return
 }
 
 open_yes_or_no_popup :: proc(text: cstring, callback: proc(), refuse_callback: proc()) {
@@ -1264,11 +1266,6 @@ draw_editor :: proc() {
 			if comment.line == u16(i_ins) {
 				c := ray.GRAY
 
-				if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
-					c   = ray.YELLOW
-					c.a = 96
-				}
-
 				if first_comment {
 					y += editor_label_y_offset / 2
 					first_comment = false
@@ -1280,9 +1277,48 @@ draw_editor :: proc() {
 					i :=
 					for 
 				}*/
-				str := lookup_comment_str(u32(i))
 
-				have_cursor       := execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) 
+				pass_to_comment_buffer :: proc(tmp: string, p: ^int) {
+					for i := 0; i < len(tmp); i += 1 {
+						comment_buffer[p^] = tmp[i]
+						p^ += 1
+					}
+				}
+
+				comment_size := 0
+				first_idx := i
+
+				relative_cursor_char : u32 = 0
+				tmp := lookup_comment_str(u32(i))
+				it  := &main_cpu.comments.data[i]
+				pass_to_comment_buffer(tmp, &comment_size)
+
+				if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
+					c   = ray.YELLOW
+					c.a = 96
+					relative_cursor_char = cursor.char
+				}
+
+				counter : u32 = 1
+				for it.have_next {
+					i += 1
+					tmp = lookup_comment_str(u32(i))
+					it  = &main_cpu.comments.data[i]
+					pass_to_comment_buffer(tmp, &comment_size)
+
+					if execution_status == .Editing && cursor.place == .Comment && cursor.comment == u32(i) {
+						c   = ray.YELLOW
+						c.a = 96
+						relative_cursor_char = cursor.char + counter * 64
+					}
+
+					counter += 1
+				}
+
+				str := string(comment_buffer[:comment_size])
+
+
+				have_cursor       := execution_status == .Editing && cursor.place == .Comment && cursor.comment >= u32(first_idx) && cursor.comment <= u32(i) 
 				horizontal_offset := primary_font_char_width * 2 + 2 + editor_label_x_offset
 				max_line_char_qnt := (window_width - horizontal_offset - cpu_view_area_width) / (primary_font_char_width + 1)
 
@@ -1299,9 +1335,9 @@ draw_editor :: proc() {
 						fmt_cstr = ray.TextFormat("# %s", to_cstr(str[:insersection_idx]))
 
 						if p != 0 {
-							have_cursor_in_this_line = have_cursor && i32(cursor.char) >  p && i32(cursor.char) <= (insersection_idx + p)
+							have_cursor_in_this_line = have_cursor && i32(relative_cursor_char) >  p && i32(relative_cursor_char) <= (insersection_idx + p)
 						} else {
-							have_cursor_in_this_line = have_cursor && i32(cursor.char) >= p && i32(cursor.char) <= (insersection_idx + p)
+							have_cursor_in_this_line = have_cursor && i32(relative_cursor_char) >= p && i32(relative_cursor_char) <= (insersection_idx + p)
 						}
 
 						p += insersection_idx
@@ -1312,9 +1348,9 @@ draw_editor :: proc() {
 						insersection_idx := i32(len(str))
 
 						if p != 0 {
-							have_cursor_in_this_line = have_cursor && i32(cursor.char) >  p && i32(cursor.char) <= (insersection_idx + p)
+							have_cursor_in_this_line = have_cursor && i32(relative_cursor_char) >  p && i32(relative_cursor_char) <= (insersection_idx + p)
 						} else {
-							have_cursor_in_this_line = have_cursor && i32(cursor.char) >= p && i32(cursor.char) <= (insersection_idx + p)
+							have_cursor_in_this_line = have_cursor && i32(relative_cursor_char) >= p && i32(relative_cursor_char) <= (insersection_idx + p)
 						}
 
 						str = ""
@@ -1322,7 +1358,7 @@ draw_editor :: proc() {
 
 					draw_text(fmt_cstr, editor_label_x_offset, y, primary_font_size, c)
 
-					if have_cursor_in_this_line do draw_cursor_comment(horizontal_offset, y, i32(cursor.char) - old_p)
+					if have_cursor_in_this_line do draw_cursor_comment(horizontal_offset, y, i32(relative_cursor_char) - old_p)
 
 					y += editor_line_height
 				}
@@ -1741,10 +1777,15 @@ process_editor_input :: proc() {
 					cursor.char = length
 				}
 			case .Comment:
+				line   := main_cpu.comments.data[cursor.comment].line
 				cstr   := lookup_comment(cursor.comment)
 				length := u32(len(cstr))
-				if cursor.char > length {
-					cursor.char = length
+				if cursor.char > length && cursor.comment < (main_cpu.comments.len - 1) {
+					next_comment_line := main_cpu.comments.data[cursor.comment + 1].line
+					if next_comment_line == line {
+						cursor.comment += 1
+						cursor.char = 1
+					}
 				}
 			}
 		}
@@ -1802,20 +1843,43 @@ process_editor_input :: proc() {
 					}
 				}
 			case .Comment:
-				if char_buffer_comment.len < 64 {
-					if key != '#' {
-						sl_insert(char_buffer_comment, byte(key), cursor.char)	    				
-						cursor.char += 1
-						unsaved = true
+				insert_char_in_comment :: proc(char: byte, char_pos: u32, comment_idx: u32) {
+					it     := &main_cpu.comments.data[comment_idx]
+					buffer := &it.content
+				fmt.println(buffer.len)
+				fmt.println(cursor)
+					if buffer.len < 64 {
+						if char != '#' {
+							sl_insert(buffer, char, char_pos)	    				
+							cursor.char += 1
+							unsaved = true
+						} else {
+							insert_comment("---", u16(cursor.ins), -1)
+						}
 					} else {
-						insert_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins), -1)
+						b: [1]byte = ---
+						if char_pos >= 63 {
+							b[0] = char							
+							cursor.char    =  1
+							cursor.comment += 1
+						} else {
+							b[0] = buffer.data[63]
+							for i := 63; i > int(char_pos); i -= 1 {
+								buffer.data[i] = buffer.data[i - 1]
+							}
+							buffer.data[char_pos] = char
+						}
+
+						if !it.have_next {
+							it.have_next = true
+							insert_comment(string(b[:]), u16(cursor.ins), int(comment_idx) + 1)
+						} else {
+							insert_char_in_comment(b[0], 0, comment_idx + 1)
+						}
 					}
-				} else {
-					main_cpu.comments.data[cursor.comment].have_next = true
-					cursor.comment += 1
-					insert_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins), int(cursor.comment))
-					cursor.char = 0
 				}
+
+				insert_char_in_comment(byte(key), cursor.char, cursor.comment)
 			}
 	    	
 	    }
