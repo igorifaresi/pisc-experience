@@ -1843,43 +1843,40 @@ process_editor_input :: proc() {
 					}
 				}
 			case .Comment:
-				insert_char_in_comment :: proc(char: byte, char_pos: u32, comment_idx: u32) {
-					it     := &main_cpu.comments.data[comment_idx]
-					buffer := &it.content
-				fmt.println(buffer.len)
-				fmt.println(cursor)
-					if buffer.len < 64 {
-						if char != '#' {
-							sl_insert(buffer, char, char_pos)	    				
-							cursor.char += 1
-							unsaved = true
-						} else {
-							insert_comment("---", u16(cursor.ins), -1)
-						}
-					} else {
-						b: [1]byte = ---
-						if char_pos >= 63 {
-							b[0] = char							
-							cursor.char    =  1
-							cursor.comment += 1
-						} else {
-							b[0] = buffer.data[63]
-							for i := 63; i > int(char_pos); i -= 1 {
-								buffer.data[i] = buffer.data[i - 1]
-							}
-							buffer.data[char_pos] = char
-						}
+				c           := byte(key)
+				char_idx    := cursor.char
+				comment_idx := cursor.comment
 
-						if !it.have_next {
-							it.have_next = true
-							insert_comment(string(b[:]), u16(cursor.ins), int(comment_idx) + 1)
-						} else {
-							insert_char_in_comment(b[0], 0, comment_idx + 1)
-						}
-					}
+				if char_idx < 64 {
+					cursor.char += 1
+				} else {
+					cursor.char = 1
+					cursor.comment += 1
 				}
 
-				insert_char_in_comment(byte(key), cursor.char, cursor.comment)
+				for {
+					it     := &main_cpu.comments.data[comment_idx]
+					buffer := &it.content
+					if char_idx == 64 {
+						char_idx = 0
+					} else if buffer.len >= 64 {
+						old_c := c
+						c = buffer.data[63]
+						for i := 63; i > int(char_idx); i -= 1 do buffer.data[i] = buffer.data[i - 1]
+						if !it.have_next {
+							it.have_next = true
+							insert_comment(string([]byte{c}), u16(cursor.ins), int(comment_idx) + 1)
+							break
+						}
+						buffer.data[char_idx] = old_c
+						char_idx = 0 
+					} else {
+						sl_insert(buffer, c, char_idx)	    				
+						unsaved = true
+						break
+					}
+					comment_idx += 1
+				}
 			}
 	    	
 	    }
