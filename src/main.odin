@@ -42,7 +42,7 @@ Config :: struct {
 	box_gap: i32,
 }
 
-Cursor_Place :: enum {
+Editor_Element :: enum {
 	Label,
 	Ins,
 	Comment,
@@ -54,7 +54,7 @@ Cursor :: struct {
 	char:    u32,
 	label:   u32,
 	comment: u32,
-	place:   Cursor_Place,
+	place:   Editor_Element,
 }
 
 BufferStatus :: enum {
@@ -123,209 +123,6 @@ popup_height: i32
 
 comment_buffer := make([]byte, 1024*1024)
 
-dummy_callback :: proc() {
-	fmt.println("Dummy callback")
-}
-
-compile :: proc() -> (success := true, err_qnt: int) {
-	sl_clear(&main_cpu.instructions)
-
-	line    := 0
-	buffers := sl_slice(&main_cpu.editing_buffers)
-	for i := 0; i < len(buffers); i += 4 {
-		ins, ok := compile_line(u32(line))
-		if ok {
-			if success do sl_push(&main_cpu.instructions, ins)
-		} else {
-			sl_clear(&main_cpu.instructions)
-			err_qnt += 1
-			success =  false
-		}
-
-		line += 1
-	}
-
-	return
-}
-
-check_label :: proc(str: string) -> (number: i16, found := false) {
-	labels := sl_slice(&main_cpu.labels)
-	for i := 0; i < len(labels); i += 1 {
-		label := &labels[i]
-
-		tmp := sl_slice(&label.name)
-		label_str := string(tmp)
-
-		if str == label_str {
-			number = i16(i)
-			found  = true
-			return
-		} 
-	}
-
-	return
-}
-
-compile_line :: proc(line: u32) -> (ins: Instruction, success := true) {
-	cstr: cstring
-
-	buffer_idx := int(line*4)
-
-	rows: [4]cstring = {
-		lookup_buffer(line, 0),
-		lookup_buffer(line, 1),
-		lookup_buffer(line, 2),
-		lookup_buffer(line, 3),
-	}
-
-	buffer_status[buffer_idx    ] = .Valid
-	buffer_status[buffer_idx + 1] = .Valid
-	buffer_status[buffer_idx + 2] = .Valid
-	buffer_status[buffer_idx + 3] = .Valid
-
-	check_line_qnt :: proc(rows: ^[4]cstring, success: ^bool, expected: int, buffer_idx: int) {
-		qnt := 0
-		for qnt < 4 && len(rows[qnt]) > 0 {
-			qnt += 1
-		}
-		
-		if qnt != expected {
-			success^ = false
-			for i := expected; i < qnt; i += 1 {
-				buffer_status[buffer_idx + i] = .Invalid
-			}
-		} else {
-			for i := qnt + 1; i < 4; i += 1 {
-				if len(rows[i]) > 0 {
-					success^ = false
-					buffer_status[buffer_idx + i] = .Invalid
-				}
-			}
-		}
-	}
-
-	ins_type, ok := mnemonics_table[rows[0]]
-	if ok {
-		ins.type = ins_type
-	} else {
-		buffer_status[buffer_idx] = .Invalid
-		success = false
-		return
-	}
-
-	switch instruction_param_type_table[ins.type] {
-	case .Reg_And_Reg_And_Offset:
-
-		check_line_qnt(&rows, &success, 4, buffer_idx)
-
-		reg1_type, reg2_type: Register_Type
-		imediate: i64
-		ok: bool
-
-		reg1_type, ok = registers_table[rows[1]]
-		if ok {
-			ins.p0 = u8(reg1_type)
-		} else {
-			buffer_status[buffer_idx + 1] = .Invalid
-			success = false
-		}
-
-		reg2_type, ok = registers_table[rows[2]]
-		if ok {
-			ins.p0 = u8(reg2_type)
-		} else {
-			buffer_status[buffer_idx + 2] = .Invalid
-			success = false
-		}
-
-		imediate, ok = strconv.parse_i64(string(rows[3]))
-		if ok {
-			ins.p2 = i16(imediate)
-			ins.imediate = true
-		} else {
-			buffer_status[buffer_idx + 3] = .Invalid
-			success = false
-		}
-
-	case .Reg_And_Reg_Or_Imediate:
-
-		check_line_qnt(&rows, &success, 3, buffer_idx)
-
-		reg1_type, reg2_type: Register_Type
-		ok: bool
-
-		reg1_type, ok = registers_table[rows[1]]
-		if ok {
-			ins.p0 = u8(reg1_type)
-		} else {
-			buffer_status[buffer_idx + 1] = .Invalid
-			success = false
-		}
-
-		buff := rows[2]
-
-		reg2_type, ok = registers_table[buff]
-		if ok {
-			ins.p1 = u8(reg2_type)
-			ins.imediate = false
-		} else {
-			imediate, ok := strconv.parse_i64(string(buff))
-			if ok {
-				ins.p2 = i16(imediate)
-				ins.imediate = true
-			} else {
-				buffer_status[buffer_idx + 2] = .Invalid
-				success = false
-			}
-		}
-
-	case .Reg:
-
-		check_line_qnt(&rows, &success, 2, buffer_idx)
-
-		reg_type, ok := registers_table[rows[1]]
-		if ok {
-			ins.p0 = u8(reg_type)
-		} else {
-			buffer_status[buffer_idx + 1] = .Invalid
-			success = false
-		}
-	
-	case .Reg_Or_Imediate:
-
-		check_line_qnt(&rows, &success, 2, buffer_idx)
-
-		buff := rows[1]
-
-		reg_type, ok := registers_table[buff]
-		if ok {
-			ins.p0 = u8(reg_type)
-		} else {
-			imediate, ok := strconv.parse_i64(string(buff))
-			if ok {
-				ins.p2 = i16(imediate)
-				ins.imediate = true
-			} else {
-				label_idx, found := check_label(string(buff))
-				if found {
-					ins.p2 = label_idx
-					ins.imediate = true
-				} else {
-					buffer_status[buffer_idx + 1] = .Invalid
-					success = false
-				}
-			}
-		}
-	
-	case .Nothing:
-
-		check_line_qnt(&rows, &success, 1, buffer_idx)
-
-	}
-
-	return
-}
-
 lookup_buffer :: proc(i_ins: u32, i_param: u32) -> cstring {
 	char_buffer := &main_cpu.editing_buffers.data[i_ins * 4 + i_param]
 	return strings.clone_to_cstring(string(sl_slice(char_buffer)))
@@ -361,34 +158,6 @@ set_buffer :: proc(i_ins: u32, i_param: u32, str: string) {
 		new_len := idx + 1
 		main_cpu.editing_buffers.len = new_len + (4 - new_len%4) 
 	}
-}
-
-push_label :: proc(str: string, line: u16) {
-	label: Label
-	
-	for i := 0; i < len(str); i += 1 {
-		sl_push(&label.name, str[i])
-	}
-	label.line = line
-
-	sl_push(&main_cpu.labels, label)
-}
-
-insert_comment :: proc(str: string, line: u16, pos: int) -> (new_comment_idx: int) {
-	comment: Comment
-	
-	for i := 0; i < len(str); i += 1 {
-		sl_push(&comment.content, str[i])
-	}
-	comment.line = line
-
-	if pos != -1 {
-		sl_insert(&main_cpu.comments, comment, u32(pos))
-	} else {
-		sl_push(&main_cpu.comments, comment)		
-	}
-
-	return
 }
 
 open_yes_or_no_popup :: proc(text: cstring, callback: proc(), refuse_callback: proc()) {
@@ -1324,6 +1093,10 @@ draw_editor :: proc() {
 
 				fmt_cstr: cstring
 				p: i32
+
+				if len(str) == 0 {
+					str = " "
+				}
 			
 				for len(str) > 0 {
 					have_cursor_in_this_line: bool = ---
@@ -1835,7 +1608,7 @@ process_editor_input :: proc() {
 							cursor.char += 1
 							unsaved = true
 						} else {
-							insert_comment("O rato roeu a roupa do rei de roma", u16(cursor.ins), -1)
+							push_comment("-", u16(cursor.ins), -1)
 						}
 					} else {
 						cursor.param += 1
@@ -1862,7 +1635,7 @@ process_editor_input :: proc() {
 						char_idx = 0
 						if !it.have_next {
 							it.have_next = true
-							insert_comment(string([]byte{c}), u16(cursor.ins), int(comment_idx) + 1)
+							push_comment(string([]byte{c}), u16(cursor.ins), int(comment_idx) + 1)
 							break
 						}
 					} else if buffer.len >= 64 {
@@ -1874,7 +1647,7 @@ process_editor_input :: proc() {
 
 						if !it.have_next {
 							it.have_next = true
-							insert_comment(string([]byte{c}), u16(cursor.ins), int(comment_idx) + 1)
+							push_comment(string([]byte{c}), u16(cursor.ins), int(comment_idx) + 1)
 							break
 						}
 
