@@ -1857,18 +1857,27 @@ process_editor_input :: proc() {
 				for {
 					it     := &main_cpu.comments.data[comment_idx]
 					buffer := &it.content
+
 					if char_idx == 64 {
 						char_idx = 0
-					} else if buffer.len >= 64 {
-						old_c := c
-						c = buffer.data[63]
-						for i := 63; i > int(char_idx); i -= 1 do buffer.data[i] = buffer.data[i - 1]
 						if !it.have_next {
 							it.have_next = true
 							insert_comment(string([]byte{c}), u16(cursor.ins), int(comment_idx) + 1)
 							break
 						}
+					} else if buffer.len >= 64 {
+						old_c := c
+						c = buffer.data[63]
+
+						for i := 63; i > int(char_idx); i -= 1 do buffer.data[i] = buffer.data[i - 1]
 						buffer.data[char_idx] = old_c
+
+						if !it.have_next {
+							it.have_next = true
+							insert_comment(string([]byte{c}), u16(cursor.ins), int(comment_idx) + 1)
+							break
+						}
+
 						char_idx = 0 
 					} else {
 						sl_insert(buffer, c, char_idx)	    				
