@@ -1,8 +1,11 @@
 package pisc
 
+import "core:fmt"
 import ray "vendor:raylib"
 
 process_editor_input_from_comment :: proc() {
+	fmt.println(cursor)
+
 	update_char_cursor :: proc() {
 		cstr: cstring
 		length: u32
@@ -134,11 +137,13 @@ process_editor_input_from_comment :: proc() {
 			line   := main_cpu.comments.data[cursor.comment].line
 			cstr   := lookup_comment(cursor.comment)
 			length := u32(len(cstr))
-			if cursor.char > length && cursor.comment < (main_cpu.comments.len - 1) {
-				next_comment_line := main_cpu.comments.data[cursor.comment + 1].line
-				if next_comment_line == line {
+			if cursor.char > length { 
+				if cursor.comment < (main_cpu.comments.len - 1) && 
+				main_cpu.comments.data[cursor.comment + 1].line == line {
 					cursor.comment += 1
 					cursor.char = 1
+				} else {
+					cursor.char = length
 				}
 			}
 		}
@@ -157,14 +162,74 @@ process_editor_input_from_comment :: proc() {
 	}
 
 	if ray.IsKeyPressed(.BACKSPACE) {
-		it     := &main_cpu.comments.data[cursor.comment]
-		buffer := &it.content
+		backspace_loop :: proc(comment_idx, char_to_remove_idx: u32) -> (removed: byte, node_deleted := false) {
+			it     := &main_cpu.comments.data[comment_idx]
+			buffer := &it.content
 
-		if !it.have_next {
-			if buffer.len == 1 {
+			if buffer.len > 1 {
+				removed = sl_remove(buffer, char_to_remove_idx)
 
+				if it.have_next {
+					child_first_char, child_deleted := backspace_loop(comment_idx + 1, 0)
+					if child_deleted do it.have_next = false
+
+					sl_push(buffer, child_first_char)
+				}
 			} else {
+				removed = buffer.data[0]
+				node_deleted = true
 
+				sl_clear(buffer)
+				sl_remove(&main_cpu.comments, comment_idx)
+			}
+
+			return
+		}
+
+		if cursor.char > 0 {
+			cursor.char -= 1
+
+			it     := &main_cpu.comments.data[cursor.comment]
+			buffer := &it.content
+			if cursor.char == 0 && buffer.len == 1 {
+				sl_pop(buffer)
+			} else {
+				backspace_loop(cursor.comment, cursor.char)
+			}
+		} else {
+			if cursor.comment > 0 &&
+			main_cpu.comments.data[cursor.comment].line == main_cpu.comments.data[cursor.comment - 1].line {
+				cursor.comment -= 1
+				
+				it_a     := &main_cpu.comments.data[cursor.comment]
+				buffer_a := &it_a.content
+
+				it_b     := &main_cpu.comments.data[cursor.comment + 1]
+				buffer_b := &it_b.content
+
+				it_a.have_next = true
+
+				if buffer_a.len < 64 do sl_push(buffer_a, ' ')
+
+				for buffer_a.len < 64 {
+					if buffer_b.len > 0 {
+						sl_push(buffer_a, sl_remove(buffer_b, 0))
+					} else {
+						it_a.have_next = false
+						sl_clear(buffer_b)
+						sl_remove(&main_cpu.comments, cursor.comment + 1)
+						break
+					}
+				}
+
+				cursor.char = buffer_a.len
+			} else {
+				it     := &main_cpu.comments.data[cursor.comment]
+				buffer := &it.content
+				sl_clear(buffer)
+				sl_remove(&main_cpu.comments, cursor.comment)
+				cursor.char = 1
+				move_down()
 			}
 		}
 	}
