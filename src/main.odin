@@ -1196,6 +1196,11 @@ set_gamepad_flags :: proc() {
 }
 
 process_editor_input :: proc() {
+	if cursor.place == .Comment {
+		process_editor_input_from_comment()
+		return
+	}
+
 	update_char_cursor :: proc() {
 		cstr: cstring
 		length: u32
