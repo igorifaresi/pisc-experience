@@ -145,8 +145,10 @@ Instruction :: struct {
 	p2:                i16,
 }
 
+LABEL_NAME_MAX :: 16
+
 Label :: struct {
-	name: Static_List(byte, 16),
+	name: Static_List(byte, LABEL_NAME_MAX),
 	line: u16,
 }
 

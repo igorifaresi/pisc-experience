@@ -931,16 +931,21 @@ draw_editor :: proc() {
 			offset := 64 - y
 			editor_y_offset += offset / 2
 		}
-	} 
+	}
 
-	draw_cursor :: proc(x, y: i32, i_ins: u32, i_param: u32) {
+	draw_cursor :: proc(x, y: i32) {
+		ray.DrawLine(x, y, x, y + config.primary_font_size, ray.LIGHTGRAY)
+		ray.DrawLine(x + 1, y, x + 1, y + config.primary_font_size, ray.LIGHTGRAY)
+	}
+
+	draw_cursor_ins :: proc(x, y: i32, i_ins: u32, i_param: u32) {
 		lerp_cursor(y)
 
 		cstr          := lookup_buffer(i_ins, i_param)
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
 		cursor_offset := i32(ray.MeasureTextEx(config.primary_font, first_half, f32(config.primary_font_size), 1.0).x)
 		cursor_x      := x + cursor_offset
-		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
+		draw_cursor(cursor_x, y)
 	}
 
 	draw_cursor_label :: proc(x, y: i32, cstr: cstring) {
@@ -949,7 +954,7 @@ draw_editor :: proc() {
 		first_half    := strings.clone_to_cstring(string(cstr)[:cursor.char])
 		cursor_offset := i32(ray.MeasureTextEx(config.primary_font, first_half, f32(config.primary_font_size), 1.0).x)
 		cursor_x      := x + cursor_offset
-		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
+		draw_cursor(cursor_x, y)
 	}
 
 	draw_cursor_comment :: proc(x, y, char_qnt: i32) {
@@ -957,7 +962,7 @@ draw_editor :: proc() {
 
 		cursor_offset := char_qnt * (primary_font_char_width + 1)
 		cursor_x      := x + cursor_offset
-		ray.DrawLine(cursor_x, y, cursor_x, y + config.primary_font_size, ray.LIGHTGRAY)
+		draw_cursor(cursor_x, y)
 	}
 
 	draw_err_indication :: proc(x: i32, y: i32, cstr: cstring) {
@@ -1167,7 +1172,7 @@ draw_editor :: proc() {
 		cstr := get_buffer_cstr(line)
 		draw_text(cstr, tmp_x, y, primary_font_size, get_color(i_ins, 0))
 		if execution_status == .Editing {
-			if cursor.place == .Ins && cursor.ins == i_ins && cursor.param == 0 do draw_cursor(tmp_x, y, i_ins, 0)
+			if cursor.place == .Ins && cursor.ins == i_ins && cursor.param == 0 do draw_cursor_ins(tmp_x, y, i_ins, 0)
 			if buffer_status[line] == .Invalid do draw_err_indication(tmp_x, y, cstr)
 		}
 
@@ -1177,7 +1182,7 @@ draw_editor :: proc() {
 			cstr := get_buffer_cstr(line + int(i))
 			draw_text(cstr, tmp_x, y, primary_font_size, get_color(i_ins, i))
 			if execution_status == .Editing {
-				if cursor.place == .Ins && cursor.ins == i_ins && cursor.param == i do draw_cursor(tmp_x, y, i_ins, i)
+				if cursor.place == .Ins && cursor.ins == i_ins && cursor.param == i do draw_cursor_ins(tmp_x, y, i_ins, i)
 				if buffer_status[line + int(i)] == .Invalid do draw_err_indication(tmp_x, y, cstr)
 			}
 
@@ -1684,7 +1689,9 @@ toggle_fullscreen :: proc() {
 	ray.ToggleFullscreen()
 }
 
-run := true
+run: bool = true
+delta: f32
+frame_count: int
 
 main :: proc() {
 	/*sl_push(&main_cpu.instructions, Instruction{ type=.Nop })
@@ -1759,6 +1766,8 @@ main :: proc() {
     }
 
     for run {
+    	delta = ray.GetFrameTime()
+
         ray.BeginDrawing()
 
         if ray.WindowShouldClose() {
@@ -1780,6 +1789,7 @@ main :: proc() {
 
         if !is_yes_or_no_popup_open {
 	        if execution_status == .Editing {
+	        	update_editor_nav_keys()
     	    	process_editor_input() //TODO
 	        } else {
     	    	set_gamepad_flags()
@@ -1807,6 +1817,8 @@ main :: proc() {
 		}
 
         ray.EndDrawing()
+
+        frame_count += 1
     }
 
     //dump_cpu_to_file(&main_cpu, "save.pisc")
