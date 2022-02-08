@@ -3,21 +3,45 @@ package pisc
 import "core:fmt"
 import ray "vendor:raylib"
 
-process_editor_input_from_comment :: proc() {
-	update_char_cursor :: proc() {
-		cstr: cstring
-		length: u32
+update_char_cursor :: proc() {
+	cstr: cstring
+	length: u32
 
-		switch cursor.place {
- 		case .Ins:     cstr = lookup_buffer(cursor.ins, cursor.param)
-		case .Label:   cstr = lookup_label(cursor.label)
-		case .Comment: cstr = lookup_comment(cursor.comment)
-		}
-		length = u32(len(cstr))
-
-		if cursor.char >= length do cursor.char = length		
+	switch cursor.place {
+		case .Ins:     cstr = lookup_buffer(cursor.ins, cursor.param)
+	case .Label:   cstr = lookup_label(cursor.label)
+	case .Comment: cstr = lookup_comment(cursor.comment)
 	}
+	length = u32(len(cstr))
 
+	if cursor.char >= length do cursor.char = length		
+}
+
+add_ins :: proc(_idx: u32) {
+	clean_buffer: Static_List(byte, 16)
+
+	idx := _idx * 4
+
+	sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+	sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+	sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+	sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
+
+	labels := sl_slice(&main_cpu.labels)
+	for i := 0; i < len(labels); i += 1 {
+		label := &labels[i]
+
+		if label.line > u16(cursor.ins) {
+			label.line += 1
+		}
+	}
+	
+	cursor.param = 0
+
+	unsaved = true	
+}
+
+process_editor_input_from_comment :: proc() {
 	move_up :: proc() {
 		search_comment_above_comment :: proc() -> bool {
 			actual_comment := &main_cpu.comments.data[cursor.comment]
@@ -307,20 +331,6 @@ process_editor_input_from_comment :: proc() {
 }
 
 process_editor_input_from_label :: proc() {
-	update_char_cursor :: proc() {
-		cstr: cstring
-		length: u32
-
-		switch cursor.place {
- 		case .Ins:     cstr = lookup_buffer(cursor.ins, cursor.param)
-		case .Label:   cstr = lookup_label(cursor.label)
-		case .Comment: cstr = lookup_comment(cursor.comment)
-		}
-		length = u32(len(cstr))
-
-		if cursor.char >= length do cursor.char = length		
-	}
-
 	move_up :: proc() {
 		has_label_above := false
 		actual_label    := &main_cpu.labels.data[cursor.label]
@@ -385,73 +395,29 @@ process_editor_input_from_label :: proc() {
 		update_char_cursor()
 	}
 
-	add_line :: proc() {
-		clean_buffer: Static_List(byte, 16)
-
-		idx: u32 
-		if cursor.place == .Ins {
-			idx = u32(cursor.ins + 1)
-		} else {
-			idx = u32(main_cpu.labels.data[cursor.label].line)
-		}
-		idx *= 4
-
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-		sl_insert(&main_cpu.editing_buffers, clean_buffer, idx)
-
-		labels := sl_slice(&main_cpu.labels)
-		for i := 0; i < len(labels); i += 1 {
-			label := &labels[i]
-
-			if label.line > u16(cursor.ins) {
-				label.line += 1
-			}
-		}
-		
-		move_down()
-
-		cursor.param = 0
-
-		unsaved = true	
-	}
-
 	delete_line :: proc() {
-		cursor.ins   = u32(main_cpu.labels.data[cursor.label].line)
+		cursor.ins   = u32(main_cpu.labels.data[cursor.label].line) // make jump to top label
 		cursor.place = .Ins
 		sl_remove(&main_cpu.labels, u32(cursor.label))
 
 		unsaved = true
 	}
 
-	if ray.IsKeyPressed(.UP)  do move_up()
-		
-	if ray.IsKeyPressed(.DOWN) do move_down()
+	if editor_nav_keys.up   do move_up()
+	if editor_nav_keys.down do move_down()
 
-	left  := ray.IsKeyPressed(.LEFT)
-	right := ray.IsKeyPressed(.RIGHT)
+	left  := editor_nav_keys.left
+	right := editor_nav_keys.right
 	l     := ray.IsKeyPressed(.L)
 	if ray.IsKeyDown(.LEFT_CONTROL) {
-		if left && cursor.param > 0 {
-			cursor.param -= 1
-			update_char_cursor()
-		}
-
-		if right && cursor.param < 3 {
-			cursor.param += 1
-			update_char_cursor()
-		}
-
 		if l {
 			push_label("", u16(cursor.ins))
 			move_up()
 			unsaved = true
 		}
 	} else {
-		if left {
-			if cursor.char > 0 do cursor.char -= 1
-		}
+		if left && cursor.char > 0 do cursor.char -= 1
+		
 		if right {
 			cursor.char += 1
 
@@ -463,43 +429,35 @@ process_editor_input_from_label :: proc() {
 		}
 	}
 
-	if ray.IsKeyPressed(.ENTER) do add_line()
+	if editor_nav_keys.enter {
+		add_ins(u32(main_cpu.labels.data[cursor.label].line))
+		cursor.char  = 0
+		cursor.place = .Ins
+		cursor.ins   = u32(main_cpu.labels.data[cursor.label].line)
+	}
 		
 	if ray.IsKeyPressed(.DELETE) do delete_line()
 
-	char_buffer: ^Static_List(byte, 16)
-	char_buffer_comment: ^Static_List(byte, 64)
+	it     := &main_cpu.labels.data[cursor.label]
+	buffer := &it.name
 
-	switch cursor.place {
-	case .Ins:
-		char_buffer = &main_cpu.editing_buffers.data[cursor.ins * 4 + cursor.param]
-	case .Label:
-		char_buffer = &main_cpu.labels.data[cursor.label].name
-	case .Comment:
-		char_buffer_comment = &main_cpu.comments.data[cursor.comment].content
-	}
-
-	if ray.IsKeyPressed(.BACKSPACE) {
-		if cursor.char > 0 {
-			if cursor.place != .Comment {
-				sl_remove(char_buffer, cursor.char - 1)
-			} else {
-				sl_remove(char_buffer_comment, cursor.char - 1)
-			}
-			cursor.char -= 1
-			unsaved = true
-		} else if cursor.param > 0 {
-			cursor.param -= 1
-			update_char_cursor()
-		}
+	if editor_nav_keys.backspace && cursor.char > 0 {
+		sl_remove(buffer, cursor.char - 1)
+		cursor.char -= 1
+		unsaved = true
 	}
 
 	for key := ray.GetCharPressed(); key > 0; key = ray.GetCharPressed() {
 	    if !(key >= 32 && key <= 125) do continue
-	    
-	    it     := &main_cpu.labels.data[cursor.label]
-		buffer := &it.name
 
-	    //sl_insert(buffer, c, char_idx)	    				
+	    if buffer.len < LABEL_NAME_MAX {
+	    	sl_insert(buffer, byte(key), cursor.char)
+	    	cursor.char += 1
+	    	unsaved = true
+	    }	    				
 	}
+}
+
+process_editor_input_from_ins :: proc() {
+
 }

@@ -1206,6 +1206,11 @@ process_editor_input :: proc() {
 		return
 	}
 
+	if cursor.place == .Label {
+		process_editor_input_from_label()
+		return
+	}
+
 	update_char_cursor :: proc() {
 		cstr: cstring
 		length: u32
