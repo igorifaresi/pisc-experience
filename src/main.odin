@@ -1200,7 +1200,7 @@ set_gamepad_flags :: proc() {
 	main_cpu.reg_table[int(Register_Type.gp)] = i16(v)
 }
 
-process_editor_input :: proc() {
+/*process_editor_input :: proc() {
 	if cursor.place == .Comment {
 		process_editor_input_from_comment()
 		return
@@ -1680,7 +1680,7 @@ process_editor_input :: proc() {
 
 	    key = ray.GetCharPressed()
 	}
-}
+}*/
 
 toggle_fullscreen :: proc() {
 	display := ray.GetCurrentMonitor()

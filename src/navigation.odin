@@ -8,7 +8,7 @@ update_char_cursor :: proc() {
 	length: u32
 
 	switch cursor.place {
-		case .Ins:     cstr = lookup_buffer(cursor.ins, cursor.param)
+	case .Ins:     cstr = lookup_buffer(cursor.ins, cursor.param)
 	case .Label:   cstr = lookup_label(cursor.label)
 	case .Comment: cstr = lookup_comment(cursor.comment)
 	}
@@ -33,6 +33,15 @@ add_ins :: proc(_idx: u32) {
 
 		if label.line > u16(cursor.ins) {
 			label.line += 1
+		}
+	}
+
+	comments := sl_slice(&main_cpu.comments)
+	for i := 0; i < len(comments); i += 1 {
+		comment := &comments[i]
+
+		if comment.line > u16(cursor.ins) {
+			comment.line += 1
 		}
 	}
 	
@@ -459,5 +468,210 @@ process_editor_input_from_label :: proc() {
 }
 
 process_editor_input_from_ins :: proc() {
+	move_up :: proc() {
+		search_label_above_ins :: proc() -> (found_label := false) {
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				label := &labels[i]
 
+				for label.line == u16(cursor.ins) {
+					found_label  = true
+					cursor.label = u32(i)
+					i += 1
+					if i < len(labels) { label = &labels[i] } else { break }
+				}
+
+				if found_label {
+					cursor.place = .Label
+					break
+				}
+			}
+			return
+		}
+
+		search_comment_above_ins :: proc() -> (found_comment := false) {
+			comments := sl_slice(&main_cpu.comments)
+			for i := 0; i < len(comments); i += 1 {
+				comment := &comments[i]
+
+				for comment.line == u16(cursor.ins) {
+					found_comment  = true
+					cursor.comment = u32(i)
+					i += 1
+					if i < len(comments) { comment = &comments[i] } else { break }
+				}
+
+				if found_comment {
+					cursor.place = .Comment
+					break
+				}
+			}
+			return
+		}
+
+		if !search_comment_above_ins() && !search_label_above_ins() {
+			if cursor.ins > 0 do cursor.ins -= 1
+		}
+
+		update_char_cursor()
+	}
+
+	move_down :: proc() {
+		search_label_below_ins :: proc() -> (found_label := false) {
+			labels := sl_slice(&main_cpu.labels)
+			for i := 0; i < len(labels); i += 1 {
+				if labels[i].line == u16(cursor.ins + 1) {
+					found_label  = true
+					cursor.label = u32(i)
+					cursor.place = .Label
+					break
+				}
+			}
+			return
+		}
+
+		search_comment_below_ins :: proc() -> (found_comment := false) {
+			comments := sl_slice(&main_cpu.comments)
+			for i := 0; i < len(comments); i += 1 {
+				if comments[i].line == u16(cursor.ins + 1) {
+					found_comment  = true
+					cursor.comment = u32(i)
+					cursor.place = .Comment
+					break
+				}
+			}
+			return
+		}
+
+		if !search_comment_below_ins() && !search_label_below_ins() {
+			length := main_cpu.editing_buffers.len / 4
+			if cursor.ins < length - 1 do cursor.ins += 1
+		}
+
+		update_char_cursor()
+	}
+
+	delete_line :: proc() {
+		idx := u32(cursor.ins)*4
+		sl_remove(&main_cpu.editing_buffers, idx)
+		sl_remove(&main_cpu.editing_buffers, idx)
+		sl_remove(&main_cpu.editing_buffers, idx)
+		sl_remove(&main_cpu.editing_buffers, idx)
+
+		labels := sl_slice(&main_cpu.labels)
+		for i := 0; i < len(labels); i += 1 {
+			label := &labels[i]
+
+			if label.line > u16(cursor.ins) do label.line -= 1
+		}
+
+		comments := sl_slice(&main_cpu.comments)
+		for i := 0; i < len(comments); i += 1 {
+			comment := &comments[i]
+
+			if comment.line > u16(cursor.ins) do comment.line -= 1
+		}
+
+		if cursor.ins >= (main_cpu.editing_buffers.len/4) do cursor.ins = main_cpu.editing_buffers.len/4 - 1
+
+		unsaved = true
+	}
+
+	if editor_nav_keys.up   do move_up()
+	if editor_nav_keys.down do move_down()
+
+	left  := editor_nav_keys.left
+	right := editor_nav_keys.right
+	l     := ray.IsKeyPressed(.L)
+	if ray.IsKeyDown(.LEFT_CONTROL) {
+		if left && cursor.param > 0 {
+			cursor.param -= 1
+			update_char_cursor()
+		}
+
+		if right && cursor.param < 3 {
+			cursor.param += 1
+			update_char_cursor()
+		}
+
+		if l {
+			push_label("", u16(cursor.ins))
+			move_up()
+			unsaved = true
+		}
+	} else {
+		if left {
+			if cursor.char == 0 {
+				if cursor.param > 0 {
+					cursor.param -= 1
+					cstr := lookup_buffer(cursor.ins, cursor.param) 
+					cursor.char = u32(len(cstr))
+					fmt.println(cursor.char)
+				} else {
+					cursor.char = 0
+				}
+			} else {
+				cursor.char -= 1
+			}
+		}
+		if right {
+			cursor.char += 1
+
+ 			cstr      := lookup_buffer(cursor.ins, cursor.param)
+			length    := u32(len(cstr))
+			if cursor.char > length {
+				if cursor.param < 3 {
+					cursor.param += 1
+					cursor.char = 0
+				} else {
+					cursor.char = length
+				}
+			}
+		}
+	}
+
+	if editor_nav_keys.enter do add_ins(u32(cursor.ins + 1))
+		
+	if ray.IsKeyPressed(.DELETE) do delete_line()
+
+
+	buffer := &main_cpu.editing_buffers.data[cursor.ins * 4 + cursor.param]
+
+	if editor_nav_keys.backspace {
+		if cursor.char > 0 {
+			sl_remove(buffer, cursor.char - 1)
+			cursor.char -= 1
+			unsaved = true
+		} else if cursor.param > 0 {
+			cursor.param -= 1
+			update_char_cursor()
+		}
+	}
+
+	for key := ray.GetCharPressed(); key > 0; key = ray.GetCharPressed() {
+	    if !(key >= 32 && key <= 125) do continue
+
+	    if buffer.len < EDITING_BUFFER_MAX {
+	    	if key == ' ' && cursor.param < 3 {
+				cursor.param += 1
+				update_char_cursor()
+			} else {
+				if key != '#' {
+					sl_insert(buffer, byte(key), cursor.char)
+					cursor.char += 1
+					unsaved = true
+				} else {
+					push_comment("-", u16(cursor.ins), -1)
+				}
+			}
+	    }	    				
+	}
+}
+
+process_editor_input :: proc() {
+	switch cursor.place {
+	case .Ins:     process_editor_input_from_ins()
+	case .Label:   process_editor_input_from_label()
+	case .Comment: process_editor_input_from_comment()
+	}
 }

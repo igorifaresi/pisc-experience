@@ -145,7 +145,8 @@ Instruction :: struct {
 	p2:                i16,
 }
 
-LABEL_NAME_MAX :: 16
+LABEL_NAME_MAX     :: 16
+EDITING_BUFFER_MAX :: 16
 
 Label :: struct {
 	name: Static_List(byte, LABEL_NAME_MAX),
@@ -168,7 +169,7 @@ CPU :: struct {
 	call_stack: Static_List(u16, 256),
 
 	instructions: Static_List(Instruction, MAX_INSTRUCTIONS),
-	editing_buffers: Static_List(Static_List(byte, 16), MAX_INSTRUCTIONS * 4),
+	editing_buffers: Static_List(Static_List(byte, EDITING_BUFFER_MAX), MAX_INSTRUCTIONS * 4),
 	labels: Static_List(Label, 4096),
 	comments: Static_List(Comment, MAX_COMMENTS),
 	mem: [1024 * 64]byte,
