@@ -765,12 +765,12 @@ draw_cpu :: proc() {
 		ray.DrawTextEx(config.secondary_font, cstr, ray.Vector2{f32(x), f32(y)}, f32(font_size), 1.0, color)
 	}
 
-	draw_border :: proc(init_x, init_y, end_x, end_y: i32) {
+	draw_border :: proc(init_x, init_y, end_x, end_y: i32, c := config.line_color) {
 		init_border_x := init_x - 4
 		init_border_y := init_y - 2
 		end_border_x  := (end_x - init_border_x) - box_gap
 		end_border_y  := (end_y - init_border_y) - box_gap
-		ray.DrawRectangleLines(init_border_x, init_border_y, end_border_x, end_border_y, config.line_color)
+		ray.DrawRectangleLines(init_border_x, init_border_y, end_border_x, end_border_y, c)
 	}
 
 	stop_on_h_border :: proc(x: i32) -> i32 {
@@ -818,7 +818,6 @@ draw_cpu :: proc() {
 	draw_text("RAM", x, ram_init_y, secondary_font_size, ray.LIGHTGRAY)
 
 	last_mmio_label: MMIO_Labels
-	mmio_label_showed_bytes := 0
 	for b := 0; b < len(main_cpu.mem); b += 1 {
 		if i%4 == 0 {
 			x = ram_init_x
@@ -836,16 +835,18 @@ draw_cpu :: proc() {
 			x += space_between_cols
 		}
 
-		is_mmio_addr, new_mmio_label := check_mmio_in_ram(u16(b))
-		if is_mmio_addr {
-			if new_mmio_label == last_mmio_label {
-				mmio_label_showed_bytes += 1
-			} else {
-				_draw_text_shortcut_hint(mmio_label_to_cstring(new_mmio_label), x, y - config.shortcut_hint_font_size + 2, highlight_color)
-				mmio_label_showed_bytes = 1
-			}
-		} else {
-			mmio_label_showed_bytes = 0
+		is_mmio_addr, new_mmio_label, remaining := check_mmio_in_ram(u16(b))
+		if is_mmio_addr && new_mmio_label != last_mmio_label {
+			mmio_label_y := y - config.shortcut_hint_font_size + 2
+
+			tmp := space_between_cols * i32(remaining > 4 ? 4 : remaining)
+			ray.DrawRectangle(x - 2, mmio_label_y, tmp - 1, 
+				(i32(remaining / 4 + 1) * cpu_view_line_height) - 1, mmio_label_to_color(new_mmio_label))
+
+			ray.DrawRectangle(x - 1, y, tmp - 3, (i32(remaining / 4 + 1) * secondary_font_size), background_color)
+			
+			_draw_text_shortcut_hint(mmio_label_to_cstring(new_mmio_label),
+				x, mmio_label_y, ray.WHITE)		
 		}
 		last_mmio_label = new_mmio_label
 

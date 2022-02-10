@@ -20,16 +20,28 @@ MMIO_Labels_Size :: enum u16 {
 
 MMIO_OFFSET :: 0x0
 
-check_mmio_in_ram :: proc(addr: u16) -> (is_io_addr := true, label: MMIO_Labels = .None) {
+check_mmio_in_ram :: proc(addr: u16) -> (is_io_addr := true, label: MMIO_Labels = .None, remaining: u16) {
 	p: u16 = MMIO_OFFSET
 
-	if addr >= p && addr < (p + u16(MMIO_Labels_Size.Gamepad)) { label = .Gamepad; return }
+	if addr >= p && addr < (p + u16(MMIO_Labels_Size.Gamepad)) {
+		label = .Gamepad
+		remaining = (p + u16(MMIO_Labels_Size.Gamepad)) - addr  
+		return
+	}
 	p += u16(MMIO_Labels_Size.Gamepad)
 
-	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseX)) { label = .MouseX; return }
+	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseX)) {
+		label = .MouseX
+		remaining = (p + u16(MMIO_Labels_Size.MouseX)) - addr  
+		return
+	}
 	p += u16(MMIO_Labels_Size.MouseX)
 
-	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseY)) { label = .MouseY; return }
+	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseY)) {
+		label = .MouseY
+		remaining = (p + u16(MMIO_Labels_Size.MouseY)) - addr  
+		return
+	}
 	p += u16(MMIO_Labels_Size.MouseY)
 
 	is_io_addr = false
@@ -42,6 +54,16 @@ mmio_label_to_cstring :: proc(label: MMIO_Labels) -> (s: cstring) {
 	case .Gamepad: s = "GAMEPAD"
 	case .MouseX:  s = "MOUSE_X"
 	case .MouseY:  s = "MOUSE_Y"
+	}
+	return
+}
+
+mmio_label_to_color :: proc(label: MMIO_Labels) -> (c: ray.Color) {
+	switch label {
+	case .None:    c = ray.BLACK
+	case .Gamepad: c = ray.DARKBLUE
+	case .MouseX:  c = ray.DARKGREEN
+	case .MouseY:  c = ray.DARKPURPLE
 	}
 	return
 }
