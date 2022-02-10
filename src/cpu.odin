@@ -4,6 +4,48 @@ import "core:fmt"
 import "core:strconv"
 import ray "vendor:raylib"
 
+MMIO_Labels :: enum {
+	None,
+	Gamepad,
+	MouseX,
+	MouseY,
+}
+
+MMIO_Labels_Size :: enum u16 {
+	None,
+	Gamepad = 2,
+	MouseX  = 2,
+	MouseY  = 2,
+}
+
+MMIO_OFFSET :: 0x0
+
+check_mmio_in_ram :: proc(addr: u16) -> (is_io_addr := true, label: MMIO_Labels = .None) {
+	p: u16 = MMIO_OFFSET
+
+	if addr >= p && addr < (p + u16(MMIO_Labels_Size.Gamepad)) { label = .Gamepad; return }
+	p += u16(MMIO_Labels_Size.Gamepad)
+
+	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseX)) { label = .MouseX; return }
+	p += u16(MMIO_Labels_Size.MouseX)
+
+	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseY)) { label = .MouseY; return }
+	p += u16(MMIO_Labels_Size.MouseY)
+
+	is_io_addr = false
+	return
+}
+
+mmio_label_to_cstring :: proc(label: MMIO_Labels) -> (s: cstring) {
+	switch label {
+	case .None:    s = "NONE"
+	case .Gamepad: s = "GAMEPAD"
+	case .MouseX:  s = "MOUSE_X"
+	case .MouseY:  s = "MOUSE_Y"
+	}
+	return
+}
+
 Gamepad_Entries :: enum u16 {
 	Up             = 1,
 	Down           = 1 << 1,

@@ -817,16 +817,37 @@ draw_cpu :: proc() {
 	i = 0
 	draw_text("RAM", x, ram_init_y, secondary_font_size, ray.LIGHTGRAY)
 
+	last_mmio_label: MMIO_Labels
+	mmio_label_showed_bytes := 0
 	for b := 0; b < len(main_cpu.mem); b += 1 {
-		if i%4 == 0 { 
+		if i%4 == 0 {
+			x = ram_init_x
+
+			/*is_mmio_addr, mmio_label := check_mmio_in_ram(u16(b))
+			if is_mmio_addr {
+				_draw_text_shortcut_hint(mmio_label_to_cstring(mmio_label), x + space_between_cols,
+					y + 4 + cpu_view_line_height / 2, highlight_color)
+			}*/
+
 			y += cpu_view_line_height
 			if y >= (reg_init_y - secondary_font_size - box_gap - 3) do break
-
-			x = ram_init_x
 
 			draw_text(ray.TextFormat("%d", i), x, y, secondary_font_size, highlight_color)
 			x += space_between_cols
 		}
+
+		is_mmio_addr, new_mmio_label := check_mmio_in_ram(u16(b))
+		if is_mmio_addr {
+			if new_mmio_label == last_mmio_label {
+				mmio_label_showed_bytes += 1
+			} else {
+				_draw_text_shortcut_hint(mmio_label_to_cstring(new_mmio_label), x, y - config.shortcut_hint_font_size + 2, highlight_color)
+				mmio_label_showed_bytes = 1
+			}
+		} else {
+			mmio_label_showed_bytes = 0
+		}
+		last_mmio_label = new_mmio_label
 
 		draw_text(ray.TextFormat("%x", main_cpu.mem[b]), x, y, secondary_font_size, secondary_font_color)
 		x += space_between_cols
