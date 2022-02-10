@@ -888,11 +888,15 @@ draw_cpu :: proc() {
 		}
 	}
 
-	{
+	/*{
 		cstr := ray.TextFormat("FPS: %d", ray.GetFPS())
 		fps_size := i32(ray.MeasureTextEx(secondary_font, cstr, f32(secondary_font_size), 1.0).x)
 		new_x := (x + GPU_BUFFER_W) - fps_size
 		draw_text(cstr, new_x, screen_init_y, secondary_font_size, ray.LIGHTGRAY)
+	}*/
+
+	{
+		
 	}
 
 	{

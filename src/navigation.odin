@@ -179,12 +179,14 @@ process_editor_input_from_comment :: proc() {
 		}
 	}
 
-	if editor_nav_keys.enter {
-		push_comment("-", main_cpu.comments.data[cursor.comment].line, int(cursor.comment) + 1)
+	push_comment_below :: proc() {
+		push_comment("", main_cpu.comments.data[cursor.comment].line, int(cursor.comment) + 1)
 		cursor.comment += 1
-		cursor.char = 1
+		cursor.char = 0
 		unsaved = true	
 	}
+
+	if editor_nav_keys.enter do push_comment_below()
 		
 	if ray.IsKeyPressed(.DELETE) {
 		sl_remove(&main_cpu.comments, cursor.comment)
@@ -292,6 +294,11 @@ process_editor_input_from_comment :: proc() {
 
 	for key := ray.GetCharPressed(); key > 0; key = ray.GetCharPressed() {
 	    if !(key >= 32 && key <= 125) do continue
+
+	    if key == '#' {
+	    	push_comment_below()
+	    	continue
+	    }
 	    
 		c           := byte(key)
 		char_idx    := cursor.char
@@ -661,7 +668,8 @@ process_editor_input_from_ins :: proc() {
 					cursor.char += 1
 					unsaved = true
 				} else {
-					push_comment("-", u16(cursor.ins), -1)
+					push_comment("", u16(cursor.ins), -1)
+					move_up()
 				}
 			}
 	    }	    				
