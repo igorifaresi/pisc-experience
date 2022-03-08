@@ -2,6 +2,66 @@ package pisc
 
 import ray "vendor:raylib"
 
+// platform nav keys detection
+
+Nav_Last_Key_State :: enum {
+	Idle,
+	First_Press,
+	Waiting_For_Auto_Repeat,
+	Auto_Repeating_Pressed,
+	Auto_Repeating_Cooldown,
+}
+
+Nav_Last_Key :: struct {
+	state: Nav_Last_Key_State,
+	timer: f32,
+	key:   ray.KeyboardKey,
+	frame_count_of_last_update: int,
+}
+
+update_nav_last_key :: proc(last_key: ^Nav_Last_Key, autorepeat_interval: f32 = 0.3) {
+	using last_key
+
+	defer frame_count_of_last_update = frame_count
+
+	if !ray.IsKeyDown(key) || (frame_count - frame_count_of_last_update) > 1 {
+		state = .Idle
+		return
+	}
+
+	switch state {
+	case .Idle:
+		state = .First_Press
+	case .First_Press:
+		timer = 0
+		state = .Waiting_For_Auto_Repeat
+	case .Waiting_For_Auto_Repeat: 
+		timer += delta
+		if timer > 0.4 do state = .Auto_Repeating_Pressed
+	case .Auto_Repeating_Pressed:
+		timer = 0
+		state = .Auto_Repeating_Cooldown
+	case .Auto_Repeating_Cooldown:
+		timer += delta
+		if timer > autorepeat_interval do state = .Auto_Repeating_Pressed
+	}
+}
+
+check_nav_key :: proc(last_key: ^Nav_Last_Key, key: ray.KeyboardKey) -> bool {
+	if key != last_key.key || last_key.state == .Idle {
+		pressed := ray.IsKeyPressed(key)
+		if last_key.state == .Idle && pressed {
+			last_key.key   = key
+			last_key.state = .First_Press
+		}
+		return pressed
+	}
+
+	return last_key.state == .First_Press || last_key.state == .Auto_Repeating_Pressed
+}
+
+// "in game" input detection
+
 Input_Entry_Type :: enum {
 	Null = 0,
 	Keyboard_Key,

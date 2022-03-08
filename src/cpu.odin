@@ -4,67 +4,43 @@ import "core:fmt"
 import "core:strconv"
 import ray "vendor:raylib"
 
-MMIO_Labels :: enum {
+MMIO_Entry_ID :: enum {
 	None,
 	Gamepad,
 	MouseX,
 	MouseY,
 }
 
-MMIO_Labels_Size :: enum u16 {
-	None,
-	Gamepad = 2,
-	MouseX  = 2,
-	MouseY  = 2,
+MMIO_Entry :: struct {
+	id:     MMIO_Entry_ID,
+	size:   u16,
+	cstr:   cstring,
+	color:  ray.Color,
 }
 
-MMIO_OFFSET :: 0x0
+MMIO_OFFSET :: 0x10
 
-check_mmio_in_ram :: proc(addr: u16) -> (is_io_addr := true, label: MMIO_Labels = .None, remaining: u16) {
+mmio_entries := [?]MMIO_Entry{
+	MMIO_Entry{ id=.Gamepad, size=2, cstr="GAMEPAD", color=ray.DARKBLUE   },
+	MMIO_Entry{ id=.MouseX , size=2, cstr="MOUSE_X", color=ray.DARKGREEN  },
+	MMIO_Entry{ id=.MouseY , size=2, cstr="MOUSE_Y", color=ray.DARKPURPLE },
+}
+
+get_mmio_entry :: proc(addr: u16) -> (entry: MMIO_Entry, found: bool, remaining: u16) {
 	p: u16 = MMIO_OFFSET
 
-	if addr >= p && addr < (p + u16(MMIO_Labels_Size.Gamepad)) {
-		label = .Gamepad
-		remaining = (p + u16(MMIO_Labels_Size.Gamepad)) - addr  
-		return
-	}
-	p += u16(MMIO_Labels_Size.Gamepad)
+	if addr < p do return
 
-	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseX)) {
-		label = .MouseX
-		remaining = (p + u16(MMIO_Labels_Size.MouseX)) - addr  
-		return
+	for it in mmio_entries {
+		if addr >= p && addr < (p + it.size) {
+			entry = it
+			remaining = (p + it.size) - addr  
+			found = true
+			return
+		}
+		p += it.size
 	}
-	p += u16(MMIO_Labels_Size.MouseX)
 
-	if addr >= p && addr < (p + u16(MMIO_Labels_Size.MouseY)) {
-		label = .MouseY
-		remaining = (p + u16(MMIO_Labels_Size.MouseY)) - addr  
-		return
-	}
-	p += u16(MMIO_Labels_Size.MouseY)
-
-	is_io_addr = false
-	return
-}
-
-mmio_label_to_cstring :: proc(label: MMIO_Labels) -> (s: cstring) {
-	switch label {
-	case .None:    s = "NONE"
-	case .Gamepad: s = "GAMEPAD"
-	case .MouseX:  s = "MOUSE_X"
-	case .MouseY:  s = "MOUSE_Y"
-	}
-	return
-}
-
-mmio_label_to_color :: proc(label: MMIO_Labels) -> (c: ray.Color) {
-	switch label {
-	case .None:    c = ray.BLACK
-	case .Gamepad: c = ray.DARKBLUE
-	case .MouseX:  c = ray.DARKGREEN
-	case .MouseY:  c = ray.DARKPURPLE
-	}
 	return
 }
 
@@ -297,8 +273,14 @@ cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
 	case .Store:
 		addr  := reg_table[inst.p1] + inst.p2
 		value := transmute(u16)(reg_table[inst.p0])
+		/*
 		mem[addr]     = cast(byte)(value & 0xff)
 		mem[addr + 1] = cast(byte)(value >> 8)
+		*/
+
+		fmt.println("addr = ", addr)
+
+		mem[addr] = 42
 
 	case .Move: reg_table[inst.p0] = b
 	case .Sl:   reg_table[inst.p0] <<= cast(u8)b
@@ -460,7 +442,7 @@ compile_line :: proc(line: u32) -> (ins: Instruction, success := true) {
 
 		reg2_type, ok = registers_table[rows[2]]
 		if ok {
-			ins.p0 = u8(reg2_type)
+			ins.p1 = u8(reg2_type)
 		} else {
 			buffer_status[buffer_idx + 2] = .Invalid
 			success = false

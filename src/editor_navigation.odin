@@ -637,7 +637,10 @@ process_editor_input_from_ins :: proc() {
 		}
 	}
 
-	if editor_nav_keys.enter do add_ins(u32(cursor.ins + 1))
+	if editor_nav_keys.enter {
+		add_ins(u32(cursor.ins + 1))
+		move_down()
+	}
 		
 	if ray.IsKeyPressed(.DELETE) do delete_line()
 
