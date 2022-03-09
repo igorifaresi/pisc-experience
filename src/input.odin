@@ -19,7 +19,7 @@ Nav_Last_Key :: struct {
 	frame_count_of_last_update: int,
 }
 
-update_nav_last_key :: proc(last_key: ^Nav_Last_Key, autorepeat_interval: f32 = 0.3) {
+update_nav_last_key :: proc(last_key: ^Nav_Last_Key, autorepeat_interval: f32 = 0.03) {
 	using last_key
 
 	defer frame_count_of_last_update = frame_count

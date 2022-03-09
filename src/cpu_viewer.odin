@@ -5,10 +5,10 @@ import "core:strings"
 import ray "vendor:raylib"
 
 CPU_Viewer_Nav_Keys :: struct {
-	plus:      bool,
-	minus:     bool,
-	page_up:   bool,
-	page_down: bool,
+	up:        bool,
+	down:      bool,
+	left:      bool,
+	right:     bool,
 }
 
 cpu_viewer_last_nav_key := Nav_Last_Key{ key=.UP }
@@ -17,34 +17,56 @@ cpu_viewer_nav_keys := CPU_Viewer_Nav_Keys{}
 update_cpu_viewer_nav_keys :: proc() {
 	update_nav_last_key(&cpu_viewer_last_nav_key, 0.05)
 
-	cpu_viewer_nav_keys.plus      = check_nav_key(&cpu_viewer_last_nav_key, .KP_ADD)
-	cpu_viewer_nav_keys.minus     = check_nav_key(&cpu_viewer_last_nav_key, .KP_SUBTRACT)
-	cpu_viewer_nav_keys.page_up   = check_nav_key(&cpu_viewer_last_nav_key, .PAGE_UP)
-	cpu_viewer_nav_keys.page_down = check_nav_key(&cpu_viewer_last_nav_key, .PAGE_DOWN)
+	cpu_viewer_nav_keys.up    = check_nav_key(&cpu_viewer_last_nav_key, .UP)
+	cpu_viewer_nav_keys.down  = check_nav_key(&cpu_viewer_last_nav_key, .DOWN)
+	cpu_viewer_nav_keys.left  = check_nav_key(&cpu_viewer_last_nav_key, .LEFT)
+	cpu_viewer_nav_keys.right = check_nav_key(&cpu_viewer_last_nav_key, .RIGHT)
 }
 
 CPU_Viewer_State :: struct {
-	ram_offset: int,
-	ram_row_byte_qnt: int,
+	ram_offset:             int,
+	ram_row_byte_qnt:       int,
+	ram_view_page_byte_qnt: int,
+	ram_addr_as_hex:        bool,
+	ram_data_as_hex:        bool,
+	ram_data_as_u16:        bool,
 }
 
 cpu_viewer_state := CPU_Viewer_State{
 	ram_row_byte_qnt=4,
+	ram_view_page_byte_qnt=64,
 }
 
-process_cpu_viewer_input :: proc() {
+process_cpu_viewer_input :: proc() -> (interacted: bool) {
 	using cpu_viewer_state
 
 	if ray.IsKeyDown(.LEFT_CONTROL) && ray.IsKeyDown(.R) {
-		if cpu_viewer_nav_keys.plus {
+		if cpu_viewer_nav_keys.down {
 			ram_offset += ram_row_byte_qnt
 			if ram_offset > (1024 * 64) do ram_offset = (1024 * 64) - 1
 		}
-		if cpu_viewer_nav_keys.minus {
+		if cpu_viewer_nav_keys.up {
 			ram_offset -= ram_row_byte_qnt
 			if ram_offset < 0 do ram_offset = 0
 		}
+
+		if cpu_viewer_nav_keys.right {
+			ram_offset += ram_view_page_byte_qnt
+			if ram_offset > (1024 * 64) do ram_offset = (1024 * 64) - 1
+		}
+		if cpu_viewer_nav_keys.left {
+			ram_offset -= ram_view_page_byte_qnt
+			if ram_offset < 0 do ram_offset = 0
+		}
+
+		if ray.IsKeyPressed(.I) do ram_addr_as_hex = !ram_addr_as_hex
+		if ray.IsKeyPressed(.N) do ram_data_as_hex = !ram_data_as_hex
+		if ray.IsKeyPressed(.B) do ram_data_as_u16 = !ram_data_as_u16
+
+		interacted = true
 	}
+
+	return
 }
 
 draw_cpu_viewer :: proc() {
@@ -103,12 +125,13 @@ draw_cpu_viewer :: proc() {
 	ram_init_y : i32 = top_bar_height + 4
 	x = ram_init_x
 	y = ram_init_y - 8
-	space_between_cols = (window_width - ram_init_x) / 5
+	space_between_addr := ((window_width - ram_init_x) / 12) * 3
+	space_between_cols = (window_width - ram_init_x - space_between_addr) / 4
 	i = 0
 	draw_text("RAM", x, ram_init_y, secondary_font_size, ray.LIGHTGRAY)
 
 	last_mmio_entry_id: MMIO_Entry_ID
-	for b := ram_offset; b < len(main_cpu.mem); b += 1 {
+	for b := ram_offset; b < len(main_cpu.mem); b += ram_data_as_u16 ? 2 : 1 {
 		if i%4 == 0 {
 			x = ram_init_x
 
@@ -121,8 +144,8 @@ draw_cpu_viewer :: proc() {
 			y += cpu_view_line_height
 			if y >= (reg_init_y - secondary_font_size - box_gap - 3) do break
 
-			draw_text(ray.TextFormat("%d", b), x, y, secondary_font_size, highlight_color)
-			x += space_between_cols
+			draw_text(format_number(u16(b), ram_addr_as_hex), x, y, secondary_font_size, highlight_color)
+			x += space_between_addr
 		}
 
 		mmio_entry, found, remaining := get_mmio_entry(u16(b))
@@ -140,10 +163,14 @@ draw_cpu_viewer :: proc() {
 		last_mmio_entry_id = mmio_entry.id
 
 
-		draw_text(ray.TextFormat("%d", main_cpu.mem[b]), x, y, secondary_font_size, secondary_font_color)
-		x += space_between_cols
 
-		i += 1
+		draw_text(
+			ram_data_as_u16 ? format_number(main_cpu.mem[b], main_cpu.mem[b + 1], ram_data_as_hex) : 
+				format_number(main_cpu.mem[b], ram_data_as_hex),
+			x, y, secondary_font_size, secondary_font_color)
+		x += ram_data_as_u16 ? space_between_cols * 2 : space_between_cols
+
+		i += ram_data_as_u16 ? 2 : 1
 	}
 
 	draw_border(ram_init_x, ram_init_y, window_width + 3, reg_init_y - 2)

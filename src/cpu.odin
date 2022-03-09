@@ -273,14 +273,8 @@ cpu_clock :: proc(using cpu: ^CPU) -> (stop := false) {
 	case .Store:
 		addr  := reg_table[inst.p1] + inst.p2
 		value := transmute(u16)(reg_table[inst.p0])
-		/*
 		mem[addr]     = cast(byte)(value & 0xff)
 		mem[addr + 1] = cast(byte)(value >> 8)
-		*/
-
-		fmt.println("addr = ", addr)
-
-		mem[addr] = 42
 
 	case .Move: reg_table[inst.p0] = b
 	case .Sl:   reg_table[inst.p0] <<= cast(u8)b

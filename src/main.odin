@@ -1163,17 +1163,19 @@ main :: proc() {
 
         //check_line(cursor.ins)
 
+        update_cpu_viewer_nav_keys()
+        interacted_with_cpu_viewer := process_cpu_viewer_input()
+
         if !is_yes_or_no_popup_open {
 	        if execution_status == .Editing {
-	        	update_editor_nav_keys()
-    	    	process_editor_input() //TODO
+	        	if !interacted_with_cpu_viewer {
+	        		update_editor_nav_keys()
+    	    		process_editor_input() //TODO
+    	    	}
 	        } else {
     	    	set_gamepad_flags()
         	}
         }
-
-        update_cpu_viewer_nav_keys()
-        process_cpu_viewer_input()
 
         draw_editor()
         draw_top_bar_and_handle_shortcuts()

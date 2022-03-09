@@ -3,8 +3,36 @@ package pisc
 
 import "core:math"
 import "core:mem"
+import ray "vendor:raylib"
 
+format_number :: proc{format_u8, format_u8_u8, format_u16}
 
+format_u16 :: proc(v: u16, hex := false) -> (num_as_cstr: cstring) {
+    if hex {
+        num_as_cstr = ray.TextFormat("0x%04x", i32(v))       
+    } else {
+        num_as_cstr = ray.TextFormat("%d", i32(v))
+    }
+    return
+}
+
+format_u8 :: proc(v: u8, hex := false) -> (num_as_cstr: cstring) {
+    if hex {
+        num_as_cstr = ray.TextFormat("0x%02x", i32(v))
+    } else {
+        num_as_cstr = ray.TextFormat("%d", i32(v))
+    }
+    return
+}
+
+format_u8_u8 :: proc(v1: u8, v2: u8, hex := false) -> (num_as_cstr: cstring) {
+    if hex {
+        num_as_cstr = ray.TextFormat("0x%02x%02x", i32(v1), i32(v2))
+    } else {
+        num_as_cstr = ray.TextFormat("%d", i32(v1) + i32(v2))
+    }
+    return
+}
 
 Fixed_List :: struct(T: typeid) {
     data: []T,
