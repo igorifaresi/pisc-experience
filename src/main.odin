@@ -590,7 +590,7 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		}
 
 		extract_filename :: proc(str: string) {
-			when os.OS == "windows" {
+			when os.OS == .Windows {
 				tmp := strings.split(str, "\\")
 				editing_file_name = tmp[len(tmp) - 1]
 			} else {
@@ -641,12 +641,10 @@ draw_top_bar_and_handle_shortcuts :: proc() {
 		}
 
 		compile_and_check :: proc() -> (ok := false) {
-			success, err_qnt := compile()
-			if !success {
+			ok, err_qnt = compile()
+			if !ok {
 				open_dialog("There is compile errors.", true)
-				return
 			}
-			ok = true
 			return
 		}
 
@@ -1162,6 +1160,8 @@ main :: proc() {
         ray.ClearBackground(config.background_color)
 
         //check_line(cursor.ins)
+
+        update_ui()
 
         update_cpu_viewer_nav_keys()
         interacted_with_cpu_viewer := process_cpu_viewer_input()

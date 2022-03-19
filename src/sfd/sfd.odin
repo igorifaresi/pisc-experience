@@ -3,8 +3,8 @@ package sfd
 import "core:c"
 import "core:os"
 
-when os.OS == "linux" do foreign import sfd "libsfd.a"
-when os.OS == "windows" {
+when os.OS == .Linux do foreign import sfd "libsfd.a"
+when os.OS == .Windows {
 	foreign import sfd {
 		"sfd.lib",
 		"system:comdlg32.lib",
