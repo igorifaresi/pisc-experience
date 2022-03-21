@@ -14,6 +14,7 @@ Editor_Nav_Keys :: struct {
 
 editor_last_nav_key := Nav_Last_Key{ key=.UP }
 editor_nav_keys := Editor_Nav_Keys{}
+editor_expected_cursor_char: u32 = 0
 
 update_editor_nav_keys :: proc() {
 	update_nav_last_key(&editor_last_nav_key)

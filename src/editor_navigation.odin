@@ -14,7 +14,13 @@ update_char_cursor :: proc() {
 	}
 	length = u32(len(cstr))
 
-	if cursor.char >= length do cursor.char = length		
+	//TODO: Look how to do it with comments
+
+	if editor_expected_cursor_char >= length {
+		cursor.char = length
+	} else {
+		cursor.char = editor_expected_cursor_char
+	}		
 }
 
 add_ins :: proc(_idx: u32) {
@@ -422,19 +428,19 @@ process_editor_input_from_label :: proc() {
 	if editor_nav_keys.up   do move_up()
 	if editor_nav_keys.down do move_down()
 
-	left  := editor_nav_keys.left
-	right := editor_nav_keys.right
-	l     := ray.IsKeyPressed(.L)
 	if ray.IsKeyDown(.LEFT_CONTROL) {
-		if l {
+		if ray.IsKeyPressed(.L) {
 			push_label("", u16(cursor.ins))
 			move_up()
 			unsaved = true
 		}
 	} else {
-		if left && cursor.char > 0 do cursor.char -= 1
+		if editor_nav_keys.left && cursor.char > 0 {
+			cursor.char -= 1
+			editor_expected_cursor_char = cursor.char
+		}
 		
-		if right {
+		if editor_nav_keys.right {
 			cursor.char += 1
 
 			cstr   := lookup_label(cursor.label)
@@ -442,6 +448,8 @@ process_editor_input_from_label :: proc() {
 			if cursor.char > length {
 				cursor.char = length
 			}
+
+			editor_expected_cursor_char = cursor.char
 		}
 	}
 
@@ -475,6 +483,13 @@ process_editor_input_from_label :: proc() {
 }
 
 process_editor_input_from_ins :: proc() {
+	/*get_ins_last_filled_param :: proc() -> u32 {
+		if main_cpu.editing_buffers.data[cursor.ins * 4 + 1].len == 0 do return 0
+		if main_cpu.editing_buffers.data[cursor.ins * 4 + 2].len == 0 do return 1
+		if main_cpu.editing_buffers.data[cursor.ins * 4 + 3].len == 0 do return 2
+		return 3
+	} */
+
 	move_up :: proc() {
 		search_label_above_ins :: proc() -> (found_label := false) {
 			labels := sl_slice(&main_cpu.labels)
@@ -518,6 +533,10 @@ process_editor_input_from_ins :: proc() {
 
 		if !search_comment_above_ins() && !search_label_above_ins() {
 			if cursor.ins > 0 do cursor.ins -= 1
+			/*
+			ins_above_last_filled_param := get_ins_last_filled_param()
+			if cursor.param >= ins_above_last_filled_param do cursor.param = ins_above_last_filled_param
+			*/
 		}
 
 		update_char_cursor()
@@ -587,27 +606,40 @@ process_editor_input_from_ins :: proc() {
 	if editor_nav_keys.up   do move_up()
 	if editor_nav_keys.down do move_down()
 
-	left  := editor_nav_keys.left
-	right := editor_nav_keys.right
-	l     := ray.IsKeyPressed(.L)
+	ctrl_left :: proc() {
+		if cursor.char > 0 {
+			cursor.char = 0
+		} else {
+			if cursor.param > 0 {
+				cursor.param -= 1
+				update_char_cursor()
+			}
+		}
+	}
+
+	ctrl_right :: proc() {
+		buffer_length := u32(len(lookup_buffer(cursor.ins, cursor.param)))
+		if cursor.char < buffer_length {
+			cursor.char = buffer_length
+		} else {
+			if cursor.param < 3 {
+				cursor.param += 1
+				update_char_cursor()
+			}
+		}
+	}
+
 	if ray.IsKeyDown(.LEFT_CONTROL) {
-		if left && cursor.param > 0 {
-			cursor.param -= 1
-			update_char_cursor()
-		}
+		if editor_nav_keys.left  do ctrl_left()
+		if editor_nav_keys.right do ctrl_right()
 
-		if right && cursor.param < 3 {
-			cursor.param += 1
-			update_char_cursor()
-		}
-
-		if l {
+		if ray.IsKeyPressed(.L) {
 			push_label("", u16(cursor.ins))
 			move_up()
 			unsaved = true
 		}
 	} else {
-		if left {
+		if editor_nav_keys.left {
 			if cursor.char == 0 {
 				if cursor.param > 0 {
 					cursor.param -= 1
@@ -620,8 +652,11 @@ process_editor_input_from_ins :: proc() {
 			} else {
 				cursor.char -= 1
 			}
+
+			editor_expected_cursor_char = cursor.char
 		}
-		if right {
+
+		if editor_nav_keys.right {
 			cursor.char += 1
 
  			cstr      := lookup_buffer(cursor.ins, cursor.param)
@@ -634,6 +669,8 @@ process_editor_input_from_ins :: proc() {
 					cursor.char = length
 				}
 			}
+
+			editor_expected_cursor_char = cursor.char
 		}
 	}
 
